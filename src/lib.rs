@@ -1,9 +1,7 @@
 mod hnsw_db;
-mod linear_db;
-mod mock_store;
 
-pub use linear_db::LinearDb;
-pub use mock_store::MockVectorStore;
+mod examples;
+mod linear_db;
 
 use std::fmt::Debug;
 use std::hash::Hash;

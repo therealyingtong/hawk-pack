@@ -13,7 +13,7 @@ The core question that the engine asks to the vector store is this:
 
 > Given vector IDs `a`, `b`, `c`, which of `a` or `b` is closer to `c`?
 
-From there, the algorithm HSNW is implemented to create a graph database along with sub-linear search and insertion procedures.
+From there, the algorithm [HNSW](https://arxiv.org/abs/1603.09320) is implemented to create a graph database along with sub-linear search and insertion procedures.
 
 ### Usage
 
@@ -21,4 +21,4 @@ From there, the algorithm HSNW is implemented to create a graph database along w
 cargo test
 ```
 
-See the `trait VectorStore` for the interface that the external store must provide.
+See the `trait VectorStore` for the interface that the external store must provide. Check out the `examples` module.

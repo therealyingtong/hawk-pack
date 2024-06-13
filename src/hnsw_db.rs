@@ -198,18 +198,15 @@ impl<V: VectorStore> HSNW<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::examples::lazy_memory_store::LazyMemoryStore;
 
     #[test]
     fn test_hnsw_db() {
-        let store = crate::MockVectorStore::new();
+        let store = LazyMemoryStore::new();
         let mut db = HSNW::new(store);
 
         let queries = (0..100)
-            .map(|i| {
-                let raw_query = vec![i];
-                let query = db.store.prepare_query(&raw_query);
-                query
-            })
+            .map(|raw_query| db.store.prepare_query(raw_query))
             .collect::<Vec<_>>();
 
         // Insert the codes.

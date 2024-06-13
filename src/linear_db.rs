@@ -37,13 +37,14 @@ impl<V: VectorStore> LinearDb<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::examples::eager_memory_store::EagerMemoryStore;
 
     #[test]
     fn test_linear_db() {
-        let store = crate::MockVectorStore::new();
+        let store = EagerMemoryStore::new();
         let mut db = LinearDb::new(store);
 
-        let query = db.store.prepare_query(&[1, 2, 3]);
+        let query = db.store.prepare_query(123);
 
         assert!(db.insert(&query));
         assert!(!db.insert(&query));

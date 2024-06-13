@@ -133,21 +133,25 @@ impl<V: VectorStore> Clone for NearestQueue<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::examples::eager_memory_store::EagerMemoryStore;
 
     #[test]
     fn test_furthest_queue() {
-        let mut store = crate::MockVectorStore::new();
+        let mut store = EagerMemoryStore::new();
+        let query = store.prepare_query(1);
+        let vector = store.insert(&query);
+        let distance = store.eval_distance(&query, &vector);
 
         // Example usage for FurthestQueue
         let mut furthest_queue = FurthestQueue::new();
-        furthest_queue.insert(&mut store, 4, 15);
+        furthest_queue.insert(&mut store, vector, distance);
         println!("{:?}", furthest_queue.get_furthest());
         println!("{:?}", furthest_queue.get_k_nearest(1));
         println!("{:?}", furthest_queue.pop_furthest());
 
         // Example usage for NearestQueue
         let mut nearest_queue = NearestQueue::from_furthest_queue(&furthest_queue);
-        nearest_queue.insert(&mut store, 5, 15);
+        nearest_queue.insert(&mut store, vector, distance);
         println!("{:?}", nearest_queue.get_nearest());
         println!("{:?}", nearest_queue.pop_nearest());
     }
