@@ -13,9 +13,7 @@ impl<V: VectorStore> LinearDb<V> {
         }
     }
 
-    pub fn insert(&mut self, raw_query: &crate::Code) -> bool {
-        let query = self.store.prepare_query(raw_query);
-
+    pub fn insert(&mut self, query: &V::QueryRef) -> bool {
         if self.exists(&query) {
             return false;
         }
@@ -45,7 +43,7 @@ mod tests {
         let store = crate::MockVectorStore::new();
         let mut db = LinearDb::new(store);
 
-        let query = crate::Code(vec![1, 2, 3]);
+        let query = db.store.prepare_query(&[1, 2, 3]);
 
         assert!(db.insert(&query));
         assert!(!db.insert(&query));

@@ -1,4 +1,4 @@
-use super::{Code, VectorStore};
+use super::VectorStore;
 
 // Example implementation of a vector store.
 #[derive(Debug)]
@@ -12,18 +12,19 @@ impl MockVectorStore {
     }
 }
 
-impl VectorStore for MockVectorStore {
-    type QueryRef = u64; // Implementation-specific encoding of queries and vectors.
-    type VectorRef = usize; // Vector ID.
-    type DistanceRef = u32; // Implementation-specific distance metric.
-
-    fn prepare_query(&mut self, raw_query: &Code) -> Self::QueryRef {
+impl MockVectorStore {
+    pub fn prepare_query(&mut self, raw_query: &[u8]) -> <Self as VectorStore>::QueryRef {
         raw_query
-            .0
             .iter()
             .rev()
             .fold(0, |acc, &x| acc * 256 + x as u64)
     }
+}
+
+impl VectorStore for MockVectorStore {
+    type QueryRef = u64; // Implementation-specific encoding of queries and vectors.
+    type VectorRef = usize; // Vector ID.
+    type DistanceRef = u32; // Implementation-specific distance metric.
 
     fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef {
         self.vectors.push(*query);

@@ -206,7 +206,7 @@ mod tests {
 
         let queries = (0..100)
             .map(|i| {
-                let raw_query = crate::Code(vec![i]);
+                let raw_query = vec![i];
                 let query = db.store.prepare_query(&raw_query);
                 query
             })

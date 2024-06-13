@@ -8,8 +8,6 @@ pub use mock_store::MockVectorStore;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-pub struct Code(Vec<u8>);
-
 // The operations exposed by a vector store, sufficient for a search algorithm.
 pub trait VectorStore: Debug {
     /// Opaque reference to a query.
@@ -26,9 +24,6 @@ pub trait VectorStore: Debug {
     ///
     /// Example: an encrypted distance.
     type DistanceRef: Clone + Debug + PartialEq + Eq + Hash;
-
-    /// Convert a raw query into a query object.
-    fn prepare_query(&mut self, raw_query: &Code) -> Self::QueryRef;
 
     /// Persist a query as a new vector in the store, and return a reference to it.
     fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef;
