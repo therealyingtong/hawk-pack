@@ -1,5 +1,11 @@
 # Hawk Pack
 
+<p align="center">
+<img src="https://github.com/Inversed-Tech/hawk-pack/assets/8718243/4a2b613f-2d07-4afe-9c1f-eda2f5a6f90b" width=50% alt="AI image of a Hawk Pack">
+</p>
+
+### Concept
+
 This is a search engine for approximate nearest vectors (kNN).
 
 All vector and scalar operations are delegated to an external system. The notions of vector and distance are fully abstracted.
