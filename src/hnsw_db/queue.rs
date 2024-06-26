@@ -1,7 +1,5 @@
 use std::ops::Deref;
 
-use rand::seq::index;
-
 use crate::VectorStore;
 
 /// FurthestQueue is a list sorted in ascending order, with fast pop of the furthest element.

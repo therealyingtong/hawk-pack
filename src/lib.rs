@@ -1,3 +1,4 @@
+mod graph_store;
 mod hnsw_db;
 
 mod examples;
@@ -5,6 +6,8 @@ mod linear_db;
 
 use std::fmt::Debug;
 use std::hash::Hash;
+
+pub use graph_store::GraphStore;
 
 // The operations exposed by a vector store, sufficient for a search algorithm.
 pub trait VectorStore: Debug {
