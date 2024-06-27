@@ -1,4 +1,5 @@
 use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::PgRow;
 use sqlx::Row;
 use std::marker::PhantomData;
 use tokio;
@@ -56,12 +57,15 @@ impl<V: VectorStore> GraphPg<V> {
 
 impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
     async fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>> {
-        let r = sqlx::query("SELECT entry_point FROM hawk_graph_entry WHERE id = 0")
-            .fetch_optional(&self.pool)
-            .await
-            .expect("Failed to fetch entry point");
-
-        r.map(|row| {
+        sqlx::query(
+            "
+                SELECT entry_point FROM hawk_graph_entry WHERE id = 0
+            ",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .expect("Failed to fetch entry point")
+        .map(|row: PgRow| {
             let x: sqlx::types::Json<EntryPoint<V::VectorRef>> = row.get("entry_point");
             let y: EntryPoint<V::VectorRef> = x.as_ref().clone();
             println!("Got entry point: {:?} {:?}", x, y);
@@ -84,11 +88,39 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
     }
 
     async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize) -> FurthestQueue<V> {
-        unimplemented!()
+        let base_str = serde_json::to_string(base).unwrap();
+
+        sqlx::query(
+            "
+            SELECT links FROM hawk_graph_links WHERE source_ref = $1
+        ",
+        )
+        .bind(base_str)
+        .fetch_optional(&self.pool)
+        .await
+        .expect("Failed to fetch links")
+        .map(|row: PgRow| {
+            let x: sqlx::types::Json<FurthestQueue<V>> = row.get("links");
+            x.as_ref().clone()
+        })
+        .unwrap_or_else(FurthestQueue::new)
     }
 
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueue<V>, lc: usize) {
-        unimplemented!()
+        let base_str = serde_json::to_string(&base).unwrap();
+
+        sqlx::query(
+            "
+            INSERT INTO hawk_graph_links (source_ref, links)
+            VALUES ($1, $2) ON CONFLICT (source_ref)
+            DO UPDATE SET links = EXCLUDED.links
+        ",
+        )
+        .bind(base_str)
+        .bind(sqlx::types::Json(&links))
+        .execute(&self.pool)
+        .await
+        .expect("Failed to set links");
     }
 }
 
@@ -97,11 +129,23 @@ async fn test_db() {
     let mut graph = GraphPg::<LazyMemoryStore>::new().await.unwrap();
     let mut vector_store = LazyMemoryStore::new();
 
+    let vectors = (0..10)
+        .map(|raw_query| {
+            let q = vector_store.prepare_query(raw_query);
+            vector_store.insert(&q)
+        })
+        .collect::<Vec<_>>();
+
+    let distances = vectors
+        .iter()
+        .map(|v| vector_store.eval_distance(&vectors[0], v))
+        .collect::<Vec<_>>();
+
     let ep = graph.get_entry_point().await;
     println!("Entry point {:?}", ep);
 
     let ep2 = EntryPoint {
-        vector_ref: vector_store.prepare_query(0),
+        vector_ref: vectors[0].clone(),
         layer_count: ep.map(|e| e.layer_count).unwrap_or_default() + 1,
     };
 
@@ -110,4 +154,18 @@ async fn test_db() {
     let ep3 = graph.get_entry_point().await.unwrap();
     println!("Entry point {:?}", ep3);
     assert_eq!(ep2, ep3);
+
+    for i in 1..4 {
+        let mut links = FurthestQueue::new();
+
+        for j in 4..7 {
+            links.insert(&mut vector_store, vectors[j].clone(), distances[j].clone());
+        }
+
+        graph.set_links(vectors[i].clone(), links.clone(), 0).await;
+
+        let links2 = graph.get_links(&vectors[i], 0).await;
+        println!("Links {:?}", links2);
+        assert_eq!(*links, *links2);
+    }
 }
