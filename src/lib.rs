@@ -1,7 +1,7 @@
-mod graph_store;
-mod hnsw_db;
+pub mod graph_store;
+pub mod hnsw_db;
 
-mod examples;
+pub mod examples;
 mod linear_db;
 
 use std::fmt::Debug;

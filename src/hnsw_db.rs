@@ -15,7 +15,7 @@ struct Params {
 
 pub struct HSNW<V: VectorStore, G: GraphStore<V>> {
     params: Params,
-    vector_store: V,
+    pub vector_store: V,
     graph_store: G,
 }
 
@@ -231,7 +231,6 @@ mod tests {
         // Search for the same codes and find matches.
         for query in queries.iter() {
             let neighbors = db.search_to_insert(&query).await;
-            println!("{:?}", neighbors);
             assert!(db.is_match(&neighbors));
         }
     }

@@ -17,8 +17,9 @@ const POOL_SIZE: u32 = 5;
 const CREATE_TABLE_LINKS: &str = "
 CREATE TABLE IF NOT EXISTS hawk_graph_links (
     source_ref text NOT NULL,
+    layer integer NOT NULL,
     links jsonb NOT NULL,
-    CONSTRAINT hawk_graph_pkey PRIMARY KEY (source_ref)
+    CONSTRAINT hawk_graph_pkey PRIMARY KEY (source_ref, layer)
 )";
 
 const CREATE_TABLE_ENTRY: &str = "
@@ -28,9 +29,6 @@ CREATE TABLE IF NOT EXISTS hawk_graph_entry (
     CONSTRAINT hawk_graph_entry_pkey PRIMARY KEY (id)
 )
 ";
-
-const INSERT_EDGE: &str =
-    "INSERT INTO `graph` (`source_ref`, `dest_ref`, `distance_ref`) VALUES ($1, $2, $3)";
 
 pub struct GraphPg<V: VectorStore> {
     pool: sqlx::PgPool,
@@ -46,7 +44,6 @@ impl<V: VectorStore> GraphPg<V> {
 
         sqlx::query(CREATE_TABLE_LINKS).execute(&pool).await?;
         sqlx::query(CREATE_TABLE_ENTRY).execute(&pool).await?;
-        println!("Created tables");
 
         Ok(GraphPg {
             pool,
@@ -68,7 +65,6 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .map(|row: PgRow| {
             let x: sqlx::types::Json<EntryPoint<V::VectorRef>> = row.get("entry_point");
             let y: EntryPoint<V::VectorRef> = x.as_ref().clone();
-            println!("Got entry point: {:?} {:?}", x, y);
             y
         })
     }
@@ -92,10 +88,11 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
 
         sqlx::query(
             "
-            SELECT links FROM hawk_graph_links WHERE source_ref = $1
+            SELECT links FROM hawk_graph_links WHERE source_ref = $1 AND layer = $2
         ",
         )
         .bind(base_str)
+        .bind(lc as i32)
         .fetch_optional(&self.pool)
         .await
         .expect("Failed to fetch links")
@@ -111,12 +108,14 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
 
         sqlx::query(
             "
-            INSERT INTO hawk_graph_links (source_ref, links)
-            VALUES ($1, $2) ON CONFLICT (source_ref)
-            DO UPDATE SET links = EXCLUDED.links
+            INSERT INTO hawk_graph_links (source_ref, layer, links)
+            VALUES ($1, $2, $3) ON CONFLICT (source_ref, layer)
+            DO UPDATE SET
+            links = EXCLUDED.links
         ",
         )
         .bind(base_str)
+        .bind(lc as i32)
         .bind(sqlx::types::Json(&links))
         .execute(&self.pool)
         .await
@@ -124,48 +123,86 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
     }
 }
 
-#[tokio::test]
-async fn test_db() {
-    let mut graph = GraphPg::<LazyMemoryStore>::new().await.unwrap();
-    let mut vector_store = LazyMemoryStore::new();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::examples::lazy_memory_store::LazyMemoryStore;
+    use crate::hnsw_db::HSNW;
+    use tokio;
 
-    let vectors = (0..10)
-        .map(|raw_query| {
-            let q = vector_store.prepare_query(raw_query);
-            vector_store.insert(&q)
-        })
-        .collect::<Vec<_>>();
+    #[tokio::test]
+    async fn test_db() {
+        let mut graph = GraphPg::<LazyMemoryStore>::new().await.unwrap();
+        let mut vector_store = LazyMemoryStore::new();
 
-    let distances = vectors
-        .iter()
-        .map(|v| vector_store.eval_distance(&vectors[0], v))
-        .collect::<Vec<_>>();
+        let vectors = (0..10)
+            .map(|raw_query| {
+                let q = vector_store.prepare_query(raw_query);
+                vector_store.insert(&q)
+            })
+            .collect::<Vec<_>>();
 
-    let ep = graph.get_entry_point().await;
-    println!("Entry point {:?}", ep);
+        let distances = vectors
+            .iter()
+            .map(|v| vector_store.eval_distance(&vectors[0], v))
+            .collect::<Vec<_>>();
 
-    let ep2 = EntryPoint {
-        vector_ref: vectors[0].clone(),
-        layer_count: ep.map(|e| e.layer_count).unwrap_or_default() + 1,
-    };
+        let ep = graph.get_entry_point().await;
 
-    graph.set_entry_point(ep2.clone()).await;
+        let ep2 = EntryPoint {
+            vector_ref: vectors[0].clone(),
+            layer_count: ep.map(|e| e.layer_count).unwrap_or_default() + 1,
+        };
 
-    let ep3 = graph.get_entry_point().await.unwrap();
-    println!("Entry point {:?}", ep3);
-    assert_eq!(ep2, ep3);
+        graph.set_entry_point(ep2.clone()).await;
 
-    for i in 1..4 {
-        let mut links = FurthestQueue::new();
+        let ep3 = graph.get_entry_point().await.unwrap();
+        assert_eq!(ep2, ep3);
 
-        for j in 4..7 {
-            links.insert(&mut vector_store, vectors[j].clone(), distances[j].clone());
+        for i in 1..4 {
+            let mut links = FurthestQueue::new();
+
+            for j in 4..7 {
+                links.insert(&mut vector_store, vectors[j].clone(), distances[j].clone());
+            }
+
+            graph.set_links(vectors[i].clone(), links.clone(), 0).await;
+
+            let links2 = graph.get_links(&vectors[i], 0).await;
+            assert_eq!(*links, *links2);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_hnsw_db() {
+        let graph_store = GraphPg::new().await.unwrap();
+        sqlx::query("DELETE FROM hawk_graph_entry")
+            .execute(&graph_store.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM hawk_graph_links")
+            .execute(&graph_store.pool)
+            .await
+            .unwrap();
+
+        let vector_store = LazyMemoryStore::new();
+        let mut db = HSNW::new(vector_store, graph_store);
+
+        let queries = (0..10)
+            .map(|raw_query| db.vector_store.prepare_query(raw_query))
+            .collect::<Vec<_>>();
+
+        // Insert the codes.
+        for query in queries.iter() {
+            let neighbors = db.search_to_insert(&query).await;
+            assert!(!db.is_match(&neighbors));
+            db.insert_from_search_results(&query, neighbors).await;
         }
 
-        graph.set_links(vectors[i].clone(), links.clone(), 0).await;
-
-        let links2 = graph.get_links(&vectors[i], 0).await;
-        println!("Links {:?}", links2);
-        assert_eq!(*links, *links2);
+        // Search for the same codes and find matches.
+        for query in queries.iter() {
+            let neighbors = db.search_to_insert(&query).await;
+            assert!(db.is_match(&neighbors));
+        }
     }
 }

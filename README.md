@@ -18,6 +18,8 @@ From there, the algorithm [HNSW](https://arxiv.org/abs/1603.09320) is implemente
 ### Usage
 
 ```bash
+docker-compose up -d
+
 cargo test
 ```
 
