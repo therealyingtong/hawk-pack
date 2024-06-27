@@ -34,7 +34,12 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         }
     }
 
-    fn connect_bidir(&mut self, q: &V::VectorRef, mut neighbors: FurthestQueue<V>, lc: usize) {
+    async fn connect_bidir(
+        &mut self,
+        q: &V::VectorRef,
+        mut neighbors: FurthestQueue<V>,
+        lc: usize,
+    ) {
         neighbors.trim_to_k_nearest(self.params.M);
         let neighbors = neighbors;
 
@@ -46,14 +51,14 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
 
         // Connect all n -> q.
         for (n, nq) in neighbors.iter() {
-            let mut links = self.graph_store.get_links(&n, lc);
+            let mut links = self.graph_store.get_links(&n, lc).await;
             links.insert(&mut self.vector_store, q.clone(), nq.clone());
             links.trim_to_k_nearest(max_links);
-            self.graph_store.set_links(n.clone(), links, lc);
+            self.graph_store.set_links(n.clone(), links, lc).await;
         }
 
         // Connect q -> all n.
-        self.graph_store.set_links(q.clone(), neighbors, lc);
+        self.graph_store.set_links(q.clone(), neighbors, lc).await;
     }
 
     fn select_layer(&self) -> usize {
@@ -71,8 +76,8 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         self.params.ef
     }
 
-    fn search_init(&mut self, query: &V::QueryRef) -> (FurthestQueue<V>, usize) {
-        if let Some(entry_point) = self.graph_store.get_entry_point() {
+    async fn search_init(&mut self, query: &V::QueryRef) -> (FurthestQueue<V>, usize) {
+        if let Some(entry_point) = self.graph_store.get_entry_point().await {
             let entry_vector = entry_point.vector_ref;
             let distance = self.vector_store.eval_distance(query, &entry_vector);
 
@@ -86,7 +91,13 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
     }
 
     /// Mutate W into the ef nearest neighbors of q_vec in the given layer.
-    fn search_layer(&mut self, q: &V::QueryRef, W: &mut FurthestQueue<V>, ef: usize, lc: usize) {
+    async fn search_layer(
+        &mut self,
+        q: &V::QueryRef,
+        W: &mut FurthestQueue<V>,
+        ef: usize,
+        lc: usize,
+    ) {
         // v: The set of already visited vectors.
         let mut v = HashSet::<V::VectorRef>::from_iter(W.iter().map(|(e, _eq)| e.clone()));
 
@@ -105,7 +116,7 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
             }
 
             // Visit all neighbors of c.
-            let c_links = self.graph_store.get_links(&c, lc);
+            let c_links = self.graph_store.get_links(&c, lc).await;
 
             for (e, _ec) in c_links.iter() {
                 // Visit any node at most once.
@@ -138,15 +149,15 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         }
     }
 
-    pub fn search_to_insert(&mut self, query: &V::QueryRef) -> Vec<FurthestQueue<V>> {
+    pub async fn search_to_insert(&mut self, query: &V::QueryRef) -> Vec<FurthestQueue<V>> {
         let mut links = vec![];
 
-        let (mut W, layer_count) = self.search_init(&query);
+        let (mut W, layer_count) = self.search_init(&query).await;
 
         // From the top layer down to layer 0.
         for lc in (0..layer_count).rev() {
             let ef = self.ef_for_layer(lc);
-            self.search_layer(&query, &mut W, ef, lc);
+            self.search_layer(&query, &mut W, ef, lc).await;
 
             links.push(W.clone());
         }
@@ -155,7 +166,7 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         links
     }
 
-    pub fn insert_from_search_results(
+    pub async fn insert_from_search_results(
         &mut self,
         query: &V::QueryRef,
         links: Vec<FurthestQueue<V>>,
@@ -170,15 +181,17 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
 
         // Connect the new vector to its neighbors in each layer.
         for (lc, layer_links) in links.into_iter().enumerate().take(l + 1) {
-            self.connect_bidir(&inserted_vector, layer_links, lc);
+            self.connect_bidir(&inserted_vector, layer_links, lc).await;
         }
 
         // If the new vector goes into a layer higher than ever seen before, then it becomes the new entry point of the graph.
         if l >= layer_count {
-            self.graph_store.set_entry_point(EntryPoint {
-                vector_ref: inserted_vector,
-                layer_count: l + 1,
-            });
+            self.graph_store
+                .set_entry_point(EntryPoint {
+                    vector_ref: inserted_vector,
+                    layer_count: l + 1,
+                })
+                .await;
         }
     }
 
@@ -196,9 +209,10 @@ mod tests {
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::graph_store::graph_mem::GraphMem;
+    use tokio;
 
-    #[test]
-    fn test_hnsw_db() {
+    #[tokio::test]
+    async fn test_hnsw_db() {
         let vector_store = LazyMemoryStore::new();
         let graph_store = GraphMem::new();
         let mut db = HSNW::new(vector_store, graph_store);
@@ -209,14 +223,14 @@ mod tests {
 
         // Insert the codes.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(&query);
+            let neighbors = db.search_to_insert(&query).await;
             assert!(!db.is_match(&neighbors));
-            db.insert_from_search_results(&query, neighbors);
+            db.insert_from_search_results(&query, neighbors).await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
-            let neighbors = db.search_to_insert(&query);
+            let neighbors = db.search_to_insert(&query).await;
             println!("{:?}", neighbors);
             assert!(db.is_match(&neighbors));
         }

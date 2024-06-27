@@ -17,11 +17,11 @@ impl<V: VectorStore> GraphMem<V> {
 }
 
 impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
-    fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>> {
+    async fn get_entry_point(&self) -> Option<EntryPoint<V::VectorRef>> {
         self.entry_point.clone()
     }
 
-    fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>) {
+    async fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>) {
         if let Some(previous) = self.entry_point.as_ref() {
             assert!(
                 previous.layer_count < entry_point.layer_count,
@@ -36,7 +36,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
         self.entry_point = Some(entry_point);
     }
 
-    fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize) -> FurthestQueue<V> {
+    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize) -> FurthestQueue<V> {
         let layer = &self.layers[lc];
         if let Some(links) = layer.get_links(base) {
             links.clone()
@@ -45,7 +45,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
         }
     }
 
-    fn set_links(&mut self, base: V::VectorRef, links: FurthestQueue<V>, lc: usize) {
+    async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueue<V>, lc: usize) {
         let layer = &mut self.layers[lc];
         layer.set_links(base, links);
     }
