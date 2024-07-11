@@ -135,6 +135,15 @@ mod tests {
         let mut graph = GraphPg::<LazyMemoryStore>::new().await.unwrap();
         let mut vector_store = LazyMemoryStore::new();
 
+        sqlx::query("DELETE FROM hawk_graph_entry")
+            .execute(&graph.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM hawk_graph_links")
+            .execute(&graph.pool)
+            .await
+            .unwrap();
+
         let vectors = (0..10)
             .map(|raw_query| {
                 let q = vector_store.prepare_query(raw_query);
