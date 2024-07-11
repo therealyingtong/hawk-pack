@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::VectorStore;
 
 /// Example implementation of a vector store - Eager variant.
@@ -12,13 +14,13 @@ pub struct EagerMemoryStore {
     distances: Vec<u32>,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VectorRef(usize);
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueryRef(usize);
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DistanceRef(usize);
 
 impl EagerMemoryStore {

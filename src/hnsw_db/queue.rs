@@ -1,11 +1,11 @@
 use std::ops::Deref;
 
-use rand::seq::index;
+use serde::{Deserialize, Serialize};
 
 use crate::VectorStore;
 
 /// FurthestQueue is a list sorted in ascending order, with fast pop of the furthest element.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FurthestQueue<V: VectorStore> {
     queue: Vec<(V::VectorRef, V::DistanceRef)>,
 }
@@ -70,7 +70,7 @@ impl<V: VectorStore> Clone for FurthestQueue<V> {
 }
 
 /// NearestQueue is a list sorted in descending order, with fast pop of the nearest element.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NearestQueue<V: VectorStore> {
     queue: Vec<(V::VectorRef, V::DistanceRef)>,
 }

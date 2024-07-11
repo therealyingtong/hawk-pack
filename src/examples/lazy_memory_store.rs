@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::VectorStore;
 
 /// Example implementation of a vector store - Lazy variant.
@@ -16,7 +18,7 @@ struct Point {
     is_persistent: bool,
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PointId(usize);
 
 impl LazyMemoryStore {

@@ -1,27 +1,52 @@
-mod hnsw_db;
+pub mod graph_store;
+pub mod hnsw_db;
 
-mod examples;
+pub mod examples;
 mod linear_db;
 
 use std::fmt::Debug;
 use std::hash::Hash;
+
+pub use graph_store::GraphStore;
+use serde::Serialize;
 
 // The operations exposed by a vector store, sufficient for a search algorithm.
 pub trait VectorStore: Debug {
     /// Opaque reference to a query.
     ///
     /// Example: a preprocessed representation optimized for distance evaluations.
-    type QueryRef: Clone + Debug + PartialEq + Eq + Hash;
+    type QueryRef: Clone
+        + Debug
+        + PartialEq
+        + Eq
+        + Hash
+        + Sync
+        + Serialize
+        + for<'de> serde::Deserialize<'de>;
 
     /// Opaque reference to a stored vector.
     ///
     /// Example: a vector ID.
-    type VectorRef: Clone + Debug + PartialEq + Eq + Hash;
+    type VectorRef: Clone
+        + Debug
+        + PartialEq
+        + Eq
+        + Hash
+        + Sync
+        + Serialize
+        + for<'de> serde::Deserialize<'de>;
 
     /// Opaque reference to a distance metric.
     ///
     /// Example: an encrypted distance.
-    type DistanceRef: Clone + Debug + PartialEq + Eq + Hash;
+    type DistanceRef: Clone
+        + Debug
+        + PartialEq
+        + Eq
+        + Hash
+        + Sync
+        + Serialize
+        + for<'de> serde::Deserialize<'de>;
 
     /// Persist a query as a new vector in the store, and return a reference to it.
     fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef;
