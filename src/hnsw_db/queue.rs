@@ -18,15 +18,17 @@ impl<V: VectorStore> FurthestQueue<V> {
     /// Insert the element `to` with distance `dist` into the queue, maitaining the ascending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub fn insert(&mut self, store: &mut V, to: V::VectorRef, dist: V::DistanceRef) {
-        let index_asc = store.search_sorted(
-            &self
-                .queue
-                .iter()
-                .map(|(_, dist)| dist.clone())
-                .collect::<Vec<_>>(),
-            &dist,
-        );
+    pub async fn insert(&mut self, store: &mut V, to: V::VectorRef, dist: V::DistanceRef) {
+        let index_asc = store
+            .search_sorted(
+                &self
+                    .queue
+                    .iter()
+                    .map(|(_, dist)| dist.clone())
+                    .collect::<Vec<_>>(),
+                &dist,
+            )
+            .await;
         self.queue.insert(index_asc, (to, dist));
     }
 
@@ -89,16 +91,18 @@ impl<V: VectorStore> NearestQueue<V> {
     /// Insert the element `to` with distance `dist` into the queue, maitaining the descending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub fn insert(&mut self, store: &mut V, to: V::VectorRef, dist: V::DistanceRef) {
-        let index_asc = store.search_sorted(
-            &self
-                .queue
-                .iter()
-                .map(|(_, dist)| dist.clone())
-                .rev() // switch to ascending order.
-                .collect::<Vec<_>>(),
-            &dist,
-        );
+    pub async fn insert(&mut self, store: &mut V, to: V::VectorRef, dist: V::DistanceRef) {
+        let index_asc = store
+            .search_sorted(
+                &self
+                    .queue
+                    .iter()
+                    .map(|(_, dist)| dist.clone())
+                    .rev() // switch to ascending order.
+                    .collect::<Vec<_>>(),
+                &dist,
+            )
+            .await;
         let index_des = self.queue.len() - index_asc; // back to descending order.
         self.queue.insert(index_des, (to, dist));
     }
@@ -135,23 +139,23 @@ mod tests {
     use super::*;
     use crate::examples::eager_memory_store::EagerMemoryStore;
 
-    #[test]
-    fn test_furthest_queue() {
+    #[tokio::test]
+    async fn test_furthest_queue() {
         let mut store = EagerMemoryStore::new();
         let query = store.prepare_query(1);
-        let vector = store.insert(&query);
-        let distance = store.eval_distance(&query, &vector);
+        let vector = store.insert(&query).await;
+        let distance = store.eval_distance(&query, &vector).await;
 
         // Example usage for FurthestQueue
         let mut furthest_queue = FurthestQueue::new();
-        furthest_queue.insert(&mut store, vector, distance);
+        furthest_queue.insert(&mut store, vector, distance).await;
         println!("{:?}", furthest_queue.get_furthest());
         println!("{:?}", furthest_queue.get_k_nearest(1));
         println!("{:?}", furthest_queue.pop_furthest());
 
         // Example usage for NearestQueue
         let mut nearest_queue = NearestQueue::from_furthest_queue(&furthest_queue);
-        nearest_queue.insert(&mut store, vector, distance);
+        nearest_queue.insert(&mut store, vector, distance).await;
         println!("{:?}", nearest_queue.get_nearest());
         println!("{:?}", nearest_queue.pop_nearest());
     }

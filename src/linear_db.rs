@@ -13,20 +13,20 @@ impl<V: VectorStore> LinearDb<V> {
         }
     }
 
-    pub fn insert(&mut self, query: &V::QueryRef) -> bool {
-        if self.exists(&query) {
+    pub async fn insert(&mut self, query: &V::QueryRef) -> bool {
+        if self.exists(&query).await {
             return false;
         }
 
-        let vector = self.store.insert(&query);
+        let vector = self.store.insert(&query).await;
         self.vectors.push(vector);
         true
     }
 
-    fn exists(&mut self, query: &V::QueryRef) -> bool {
+    async fn exists(&mut self, query: &V::QueryRef) -> bool {
         for vector in &self.vectors {
-            let distance = self.store.eval_distance(&query, vector);
-            if self.store.is_match(&distance) {
+            let distance = self.store.eval_distance(&query, vector).await;
+            if self.store.is_match(&distance).await {
                 return true;
             }
         }
@@ -39,14 +39,14 @@ mod tests {
     use super::*;
     use crate::examples::eager_memory_store::EagerMemoryStore;
 
-    #[test]
-    fn test_linear_db() {
+    #[tokio::test]
+    async fn test_linear_db() {
         let store = EagerMemoryStore::new();
         let mut db = LinearDb::new(store);
 
         let query = db.store.prepare_query(123);
 
-        assert!(db.insert(&query));
-        assert!(!db.insert(&query));
+        assert!(db.insert(&query).await);
+        assert!(!db.insert(&query).await);
     }
 }

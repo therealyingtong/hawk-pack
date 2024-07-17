@@ -52,7 +52,9 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         // Connect all n -> q.
         for (n, nq) in neighbors.iter() {
             let mut links = self.graph_store.get_links(&n, lc).await;
-            links.insert(&mut self.vector_store, q.clone(), nq.clone());
+            links
+                .insert(&mut self.vector_store, q.clone(), nq.clone())
+                .await;
             links.trim_to_k_nearest(max_links);
             self.graph_store.set_links(n.clone(), links, lc).await;
         }
@@ -79,10 +81,11 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
     async fn search_init(&mut self, query: &V::QueryRef) -> (FurthestQueue<V>, usize) {
         if let Some(entry_point) = self.graph_store.get_entry_point().await {
             let entry_vector = entry_point.vector_ref;
-            let distance = self.vector_store.eval_distance(query, &entry_vector);
+            let distance = self.vector_store.eval_distance(query, &entry_vector).await;
 
             let mut W = FurthestQueue::<V>::new();
-            W.insert(&mut self.vector_store, entry_vector, distance);
+            W.insert(&mut self.vector_store, entry_vector, distance)
+                .await;
 
             (W, entry_point.layer_count)
         } else {
@@ -111,7 +114,7 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
             let (c, cq) = C.pop_nearest().expect("C cannot be empty").clone();
 
             // If the nearest distance to C is greater than the furthest distance in W, then we can stop.
-            if self.vector_store.less_than(&fq, &cq) {
+            if self.vector_store.less_than(&fq, &cq).await {
                 break;
             }
 
@@ -124,11 +127,11 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
                     continue;
                 }
 
-                let eq = self.vector_store.eval_distance(q, e);
+                let eq = self.vector_store.eval_distance(q, e).await;
 
                 if W.len() == ef {
                     // When W is full, we decide whether to replace the furthest element.
-                    if self.vector_store.less_than(&eq, &fq) {
+                    if self.vector_store.less_than(&eq, &fq).await {
                         // Make room for the new better candidate…
                         W.pop_furthest();
                     } else {
@@ -138,10 +141,11 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
                 }
 
                 // Track the new candidate in C so we will continue this path later.
-                C.insert(&mut self.vector_store, e.clone(), eq.clone());
+                C.insert(&mut self.vector_store, e.clone(), eq.clone())
+                    .await;
 
                 // Track the new candidate as a potential k-nearest.
-                W.insert(&mut self.vector_store, e.clone(), eq);
+                W.insert(&mut self.vector_store, e.clone(), eq).await;
 
                 // fq stays the furthest distance in W.
                 (_, fq) = W.get_furthest().expect("W cannot be empty").clone();
@@ -174,7 +178,7 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         let layer_count = links.len();
 
         // Insert the new vector into the store.
-        let inserted_vector = self.vector_store.insert(&query);
+        let inserted_vector = self.vector_store.insert(&query).await;
 
         // Choose a maximum layer for the new vector. It may be greater than the current number of layers.
         let l = self.select_layer();
@@ -195,12 +199,14 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
         }
     }
 
-    pub fn is_match(&self, neighbors: &[FurthestQueue<V>]) -> bool {
-        neighbors
+    pub async fn is_match(&self, neighbors: &[FurthestQueue<V>]) -> bool {
+        match neighbors
             .first()
             .and_then(|bottom_layer| bottom_layer.get_nearest())
-            .map(|(_, smallest_distance)| self.vector_store.is_match(smallest_distance))
-            .unwrap_or(false) // Empty database.
+        {
+            None => false, // Empty database.
+            Some((_, smallest_distance)) => self.vector_store.is_match(smallest_distance).await,
+        }
     }
 }
 
@@ -224,14 +230,14 @@ mod tests {
         // Insert the codes.
         for query in queries.iter() {
             let neighbors = db.search_to_insert(&query).await;
-            assert!(!db.is_match(&neighbors));
+            assert!(!db.is_match(&neighbors).await);
             db.insert_from_search_results(&query, neighbors).await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
             let neighbors = db.search_to_insert(&query).await;
-            assert!(db.is_match(&neighbors));
+            assert!(db.is_match(&neighbors).await);
         }
     }
 }

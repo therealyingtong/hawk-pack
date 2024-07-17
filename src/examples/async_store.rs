@@ -6,7 +6,7 @@ use crate::VectorStore;
 ///
 /// A distance is lazily represented in `DistanceRef` as a tuple of point IDs, and the actual distance is evaluated later in `less_than`.
 #[derive(Debug)]
-pub struct LazyMemoryStore {
+pub struct AsyncStore {
     points: Vec<Point>,
 }
 
@@ -21,13 +21,13 @@ struct Point {
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PointId(usize);
 
-impl LazyMemoryStore {
+impl AsyncStore {
     pub fn new() -> Self {
-        LazyMemoryStore { points: vec![] }
+        AsyncStore { points: vec![] }
     }
 }
 
-impl LazyMemoryStore {
+impl AsyncStore {
     pub fn prepare_query(&mut self, raw_query: u64) -> <Self as VectorStore>::QueryRef {
         self.points.push(Point {
             data: raw_query,
@@ -46,7 +46,7 @@ impl LazyMemoryStore {
     }
 }
 
-impl VectorStore for LazyMemoryStore {
+impl VectorStore for AsyncStore {
     type QueryRef = PointId; // Vector ID, pending insertion.
     type VectorRef = PointId; // Vector ID, inserted.
     type DistanceRef = (PointId, PointId); // Lazy distance representation.
@@ -85,7 +85,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_eval_distance() {
-        let mut store = LazyMemoryStore::new();
+        let mut store = AsyncStore::new();
 
         let query = store.prepare_query(11);
         let vector = store.insert(&query).await;
