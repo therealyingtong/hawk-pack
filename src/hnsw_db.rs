@@ -121,14 +121,26 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
             // Visit all neighbors of c.
             let c_links = self.graph_store.get_links(&c, lc).await;
 
-            for (e, _ec) in c_links.iter() {
-                // Visit any node at most once.
-                if !v.insert(e.clone()) {
-                    continue;
-                }
+            // Evaluate the distances of the neighbors to the query, as a batch.
+            let c_links = {
+                let e_batch = c_links
+                    .iter()
+                    .map(|(e, _ec)| e.clone())
+                    .filter(|e| {
+                        // Visit any node at most once.
+                        v.insert(e.clone())
+                    })
+                    .collect::<Vec<_>>();
 
-                let eq = self.vector_store.eval_distance(q, e).await;
+                let distances = self.vector_store.eval_distance_batch(q, &e_batch).await;
 
+                e_batch
+                    .into_iter()
+                    .zip(distances.into_iter())
+                    .collect::<Vec<_>>()
+            };
+
+            for (e, eq) in c_links.into_iter() {
                 if W.len() == ef {
                     // When W is full, we decide whether to replace the furthest element.
                     if self.vector_store.less_than(&eq, &fq).await {
@@ -145,7 +157,7 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
                     .await;
 
                 // Track the new candidate as a potential k-nearest.
-                W.insert(&mut self.vector_store, e.clone(), eq).await;
+                W.insert(&mut self.vector_store, e, eq).await;
 
                 // fq stays the furthest distance in W.
                 (_, fq) = W.get_furthest().expect("W cannot be empty").clone();
