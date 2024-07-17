@@ -2,12 +2,8 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::postgres::PgRow;
 use sqlx::Row;
 use std::marker::PhantomData;
-use tokio;
-use tokio::runtime::Runtime;
 
-use crate::{
-    examples::lazy_memory_store::LazyMemoryStore, hnsw_db::FurthestQueue, GraphStore, VectorStore,
-};
+use crate::{hnsw_db::FurthestQueue, GraphStore, VectorStore};
 
 use super::EntryPoint;
 
@@ -144,17 +140,22 @@ mod tests {
             .await
             .unwrap();
 
-        let vectors = (0..10)
-            .map(|raw_query| {
+        let vectors = {
+            let mut v = vec![];
+            for raw_query in 0..10 {
                 let q = vector_store.prepare_query(raw_query);
-                vector_store.insert(&q)
-            })
-            .collect::<Vec<_>>();
+                v.push(vector_store.insert(&q).await);
+            }
+            v
+        };
 
-        let distances = vectors
-            .iter()
-            .map(|v| vector_store.eval_distance(&vectors[0], v))
-            .collect::<Vec<_>>();
+        let distances = {
+            let mut d = vec![];
+            for v in vectors.iter() {
+                d.push(vector_store.eval_distance(&vectors[0], v).await);
+            }
+            d
+        };
 
         let ep = graph.get_entry_point().await;
 
@@ -172,7 +173,9 @@ mod tests {
             let mut links = FurthestQueue::new();
 
             for j in 4..7 {
-                links.insert(&mut vector_store, vectors[j].clone(), distances[j].clone());
+                links
+                    .insert(&mut vector_store, vectors[j].clone(), distances[j].clone())
+                    .await;
             }
 
             graph.set_links(vectors[i].clone(), links.clone(), 0).await;
@@ -204,14 +207,14 @@ mod tests {
         // Insert the codes.
         for query in queries.iter() {
             let neighbors = db.search_to_insert(&query).await;
-            assert!(!db.is_match(&neighbors));
+            assert!(!db.is_match(&neighbors).await);
             db.insert_from_search_results(&query, neighbors).await;
         }
 
         // Search for the same codes and find matches.
         for query in queries.iter() {
             let neighbors = db.search_to_insert(&query).await;
-            assert!(db.is_match(&neighbors));
+            assert!(db.is_match(&neighbors).await);
         }
     }
 }

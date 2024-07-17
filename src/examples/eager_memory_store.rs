@@ -45,7 +45,7 @@ impl VectorStore for EagerMemoryStore {
     type VectorRef = VectorRef;
     type DistanceRef = DistanceRef;
 
-    fn insert(&mut self, query_ref: &Self::QueryRef) -> Self::VectorRef {
+    async fn insert(&mut self, query_ref: &Self::QueryRef) -> Self::VectorRef {
         let query = self.pending_queries[query_ref.0];
         // Here the query can be removed (not implemented).
 
@@ -53,7 +53,7 @@ impl VectorStore for EagerMemoryStore {
         VectorRef(self.vectors.len() - 1)
     }
 
-    fn eval_distance(
+    async fn eval_distance(
         &mut self,
         query_ref: &Self::QueryRef,
         vector_ref: &Self::VectorRef,
@@ -67,11 +67,15 @@ impl VectorStore for EagerMemoryStore {
         DistanceRef(self.distances.len() - 1)
     }
 
-    fn is_match(&self, distance: &Self::DistanceRef) -> bool {
+    async fn is_match(&self, distance: &Self::DistanceRef) -> bool {
         self.distances[distance.0] == 0
     }
 
-    fn less_than(&self, distance1: &Self::DistanceRef, distance2: &Self::DistanceRef) -> bool {
+    async fn less_than(
+        &self,
+        distance1: &Self::DistanceRef,
+        distance2: &Self::DistanceRef,
+    ) -> bool {
         self.distances[distance1.0] < self.distances[distance2.0]
     }
 }
@@ -80,18 +84,18 @@ impl VectorStore for EagerMemoryStore {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_eval_distance() {
+    #[tokio::test]
+    async fn test_eval_distance() {
         let mut store = EagerMemoryStore::new();
 
         let query = store.prepare_query(11);
-        let vector = store.insert(&query);
-        let distance = store.eval_distance(&query, &vector);
-        assert!(store.is_match(&distance));
+        let vector = store.insert(&query).await;
+        let distance = store.eval_distance(&query, &vector).await;
+        assert!(store.is_match(&distance).await);
 
         let other_query = store.prepare_query(12);
-        let other_vector = store.insert(&other_query);
-        let other_distance = store.eval_distance(&query, &other_vector);
-        assert!(!store.is_match(&other_distance));
+        let other_vector = store.insert(&other_query).await;
+        let other_distance = store.eval_distance(&query, &other_vector).await;
+        assert!(!store.is_match(&other_distance).await);
     }
 }
