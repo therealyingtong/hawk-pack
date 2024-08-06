@@ -84,4 +84,47 @@ pub trait VectorStore: Debug {
         }
         left
     }
+
+    // Batch variants.
+
+    /// Persist a batch of queries as new vectors in the store, and return references to them.
+    /// The default implementation is a loop over `insert`.
+    /// Override for more efficient batch insertions.
+    async fn insert_batch(&mut self, queries: &[Self::QueryRef]) -> Vec<Self::VectorRef> {
+        let mut results = Vec::with_capacity(queries.len());
+        for query in queries {
+            results.push(self.insert(query).await);
+        }
+        results
+    }
+
+    /// Evaluate the distances between a query and a batch of vectors.
+    /// The default implementation is a loop over `eval_distance`.
+    /// Override for more efficient batch distance evaluations.
+    async fn eval_distance_batch(
+        &mut self,
+        query: &Self::QueryRef,
+        vectors: &[Self::VectorRef],
+    ) -> Vec<Self::DistanceRef> {
+        let mut results = Vec::with_capacity(vectors.len());
+        for vector in vectors {
+            results.push(self.eval_distance(query, vector).await);
+        }
+        results
+    }
+
+    /// Compare a distance with a batch of distances.
+    /// The default implementation is a loop over `less_than`.
+    /// Override for more efficient batch comparisons.
+    async fn less_than_batch(
+        &self,
+        distance: &Self::DistanceRef,
+        distances: &[Self::DistanceRef],
+    ) -> Vec<bool> {
+        let mut results = Vec::with_capacity(distances.len());
+        for other_distance in distances {
+            results.push(self.less_than(distance, other_distance).await);
+        }
+        results
+    }
 }
