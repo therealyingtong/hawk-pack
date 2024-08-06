@@ -184,13 +184,10 @@ impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
 
     pub async fn insert_from_search_results(
         &mut self,
-        query: &V::QueryRef,
+        inserted_vector: V::VectorRef,
         links: Vec<FurthestQueue<V>>,
     ) {
         let layer_count = links.len();
-
-        // Insert the new vector into the store.
-        let inserted_vector = self.vector_store.insert(&query).await;
 
         // Choose a maximum layer for the new vector. It may be greater than the current number of layers.
         let l = self.select_layer();
@@ -243,7 +240,9 @@ mod tests {
         for query in queries.iter() {
             let neighbors = db.search_to_insert(&query).await;
             assert!(!db.is_match(&neighbors).await);
-            db.insert_from_search_results(&query, neighbors).await;
+            // Insert the new vector into the store.
+            let inserted = db.vector_store.insert(&query).await;
+            db.insert_from_search_results(inserted, neighbors).await;
         }
 
         // Search for the same codes and find matches.

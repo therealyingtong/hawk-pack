@@ -208,7 +208,9 @@ mod tests {
         for query in queries.iter() {
             let neighbors = db.search_to_insert(&query).await;
             assert!(!db.is_match(&neighbors).await);
-            db.insert_from_search_results(&query, neighbors).await;
+            // Insert the new vector into the store.
+            let inserted = db.vector_store.insert(&query).await;
+            db.insert_from_search_results(inserted, neighbors).await;
         }
 
         // Search for the same codes and find matches.
