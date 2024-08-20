@@ -13,15 +13,19 @@ struct Params {
     m_L: f64,
 }
 
-pub struct HSNW<V: VectorStore, G: GraphStore<V>> {
+/// An implementation of the HNSW algorithm.
+///
+/// Operations on vectors are delegated to a VectorStore.
+/// Operations on the graph are delegate to a GraphStore.
+pub struct HawkSearcher<V: VectorStore, G: GraphStore<V>> {
     params: Params,
     pub vector_store: V,
     graph_store: G,
 }
 
-impl<V: VectorStore, G: GraphStore<V>> HSNW<V, G> {
+impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     pub fn new(vector_store: V, graph_store: G) -> Self {
-        HSNW {
+        HawkSearcher {
             params: Params {
                 ef: 32,
                 M: 32,
@@ -230,7 +234,7 @@ mod tests {
     async fn test_hnsw_db() {
         let vector_store = LazyMemoryStore::new();
         let graph_store = GraphMem::new();
-        let mut db = HSNW::new(vector_store, graph_store);
+        let mut db = HawkSearcher::new(vector_store, graph_store);
 
         let queries = (0..100)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))

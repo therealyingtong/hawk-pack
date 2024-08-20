@@ -123,7 +123,7 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
 mod tests {
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
-    use crate::hnsw_db::HSNW;
+    use crate::hnsw_db::HawkSearcher;
     use tokio;
 
     #[tokio::test]
@@ -198,7 +198,7 @@ mod tests {
             .unwrap();
 
         let vector_store = LazyMemoryStore::new();
-        let mut db = HSNW::new(vector_store, graph_store);
+        let mut db = HawkSearcher::new(vector_store, graph_store);
 
         let queries = (0..10)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))
