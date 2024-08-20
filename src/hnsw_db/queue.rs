@@ -15,6 +15,10 @@ impl<V: VectorStore> FurthestQueue<V> {
         FurthestQueue { queue: vec![] }
     }
 
+    pub fn from_ascending_vec(queue: Vec<(V::VectorRef, V::DistanceRef)>) -> Self {
+        FurthestQueue { queue }
+    }
+
     /// Insert the element `to` with distance `dist` into the queue, maitaining the ascending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
@@ -68,6 +72,12 @@ impl<V: VectorStore> Clone for FurthestQueue<V> {
         FurthestQueue {
             queue: self.queue.clone(),
         }
+    }
+}
+
+impl<V: VectorStore> From<FurthestQueue<V>> for Vec<(V::VectorRef, V::DistanceRef)> {
+    fn from(queue: FurthestQueue<V>) -> Self {
+        queue.queue
     }
 }
 

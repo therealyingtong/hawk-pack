@@ -18,7 +18,7 @@ pub trait GraphStore<V: VectorStore> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EntryPoint<VectorRef: Clone + Debug> {
+pub struct EntryPoint<VectorRef> {
     pub vector_ref: VectorRef,
     pub layer_count: usize,
 }

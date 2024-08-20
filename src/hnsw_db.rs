@@ -2,6 +2,7 @@
 use std::collections::HashSet;
 mod queue;
 pub use queue::{FurthestQueue, NearestQueue};
+pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
