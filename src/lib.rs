@@ -10,43 +10,32 @@ use std::hash::Hash;
 pub use graph_store::GraphStore;
 use serde::Serialize;
 
+pub trait Ref:
+    Clone + Debug + PartialEq + Eq + Hash + Sync + Serialize + for<'de> serde::Deserialize<'de>
+{
+}
+
+impl<T> Ref for T where
+    T: Clone + Debug + PartialEq + Eq + Hash + Sync + Serialize + for<'de> serde::Deserialize<'de>
+{
+}
+
 // The operations exposed by a vector store, sufficient for a search algorithm.
 pub trait VectorStore: Debug {
     /// Opaque reference to a query.
     ///
     /// Example: a preprocessed representation optimized for distance evaluations.
-    type QueryRef: Clone
-        + Debug
-        + PartialEq
-        + Eq
-        + Hash
-        + Sync
-        + Serialize
-        + for<'de> serde::Deserialize<'de>;
+    type QueryRef: Ref;
 
     /// Opaque reference to a stored vector.
     ///
     /// Example: a vector ID.
-    type VectorRef: Clone
-        + Debug
-        + PartialEq
-        + Eq
-        + Hash
-        + Sync
-        + Serialize
-        + for<'de> serde::Deserialize<'de>;
+    type VectorRef: Ref;
 
     /// Opaque reference to a distance metric.
     ///
     /// Example: an encrypted distance.
-    type DistanceRef: Clone
-        + Debug
-        + PartialEq
-        + Eq
-        + Hash
-        + Sync
-        + Serialize
-        + for<'de> serde::Deserialize<'de>;
+    type DistanceRef: Ref;
 
     /// Persist a query as a new vector in the store, and return a reference to it.
     async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef;
