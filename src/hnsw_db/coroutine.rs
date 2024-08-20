@@ -3,9 +3,7 @@ use crate::{
     hnsw_db::{FurthestQueue, HawkSearcher},
     GraphStore, Ref, VectorStore,
 };
-use serde::Serialize;
 use std::fmt::Debug;
-use std::hash::Hash;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -42,6 +40,7 @@ where
 
 pub type HawkStream<Q, V, D> = ReceiverStream<Op<Q, V, D>>;
 
+#[derive(Debug)]
 pub enum Op<Query, Vector, Distance> {
     // VectorStore operations.
     EvalDistanceBatch {
@@ -191,5 +190,96 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
             lc,
         };
         self.ops.send(op).await.unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Op::*;
+    use super::*;
+    use futures::stream::StreamExt;
+
+    type Q = i64;
+    type V = i64;
+    type D = i64;
+
+    #[tokio::test]
+    async fn test_search_to_insert_stream_empty() {
+        let mut stream = search_to_insert_stream::<Q, V, D>(0);
+
+        let op = stream.next().await.unwrap();
+        match op {
+            GetEntryPoint { reply } => {
+                reply.send(None).unwrap();
+            }
+            _ => panic!("Expected GetEntryPoint, got {:?}", op),
+        }
+
+        let op = stream.next().await.unwrap();
+        match op {
+            Op::SearchResult { query, result } => {
+                assert_eq!(query, 0);
+                assert_eq!(result, Vec::<Vec<(V, D)>>::new());
+            }
+            _ => panic!("Expected SearchResult, got {:?}", op),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_to_insert_stream() {
+        let some_vec = 0;
+        let some_query = 1;
+        let some_distance = 10;
+        let ep = EntryPoint {
+            vector_ref: some_vec,
+            layer_count: 1,
+        };
+
+        let mut stream = search_to_insert_stream::<Q, V, D>(some_query);
+
+        let op = stream.next().await.unwrap();
+        match op {
+            GetEntryPoint { reply } => {
+                reply.send(Some(ep)).unwrap();
+            }
+            _ => panic!("Expected GetEntryPoint, got {:?}", op),
+        }
+
+        let op = stream.next().await.unwrap();
+        match op {
+            EvalDistanceBatch {
+                query,
+                vectors,
+                reply,
+            } => {
+                assert_eq!(query, some_query);
+                assert_eq!(vectors, vec![some_vec]);
+                reply.send(vec![some_distance]).unwrap();
+            }
+            _ => panic!("Expected EvalDistanceBatch, got {:?}", op),
+        }
+
+        let op = stream.next().await.unwrap();
+        match op {
+            LessThanBatch {
+                distance,
+                distances,
+                reply,
+            } => {
+                assert_eq!(distance, some_distance);
+                assert_eq!(distances, vec![some_distance]);
+                reply.send(vec![true]).unwrap();
+            }
+            _ => panic!("Expected LessThanBatch, got {:?}", op),
+        }
+
+        let op = stream.next().await.unwrap();
+        match op {
+            Op::SearchResult { query, result } => {
+                assert_eq!(query, some_query);
+                assert_eq!(result, vec![vec![(some_vec, some_distance)]]);
+            }
+            _ => panic!("Expected SearchResult, got {:?}", op),
+        }
     }
 }
