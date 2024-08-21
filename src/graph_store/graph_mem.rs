@@ -1,5 +1,8 @@
 use super::{EntryPoint, GraphStore};
-use crate::{hnsw_db::FurthestQueue, VectorStore};
+use crate::{
+    hnsw_db::{FurthestQueue, FurthestQueueV},
+    VectorStore,
+};
 use std::collections::HashMap;
 
 pub struct GraphMem<V: VectorStore> {
@@ -36,7 +39,11 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
         self.entry_point = Some(entry_point);
     }
 
-    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize) -> FurthestQueue<V> {
+    async fn get_links(
+        &self,
+        base: &<V as VectorStore>::VectorRef,
+        lc: usize,
+    ) -> FurthestQueueV<V> {
         let layer = &self.layers[lc];
         if let Some(links) = layer.get_links(base) {
             links.clone()
@@ -45,7 +52,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
         }
     }
 
-    async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueue<V>, lc: usize) {
+    async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize) {
         let layer = &mut self.layers[lc];
         layer.set_links(base, links);
     }
@@ -53,7 +60,7 @@ impl<V: VectorStore> GraphStore<V> for GraphMem<V> {
 
 struct Layer<V: VectorStore> {
     /// Map a base vector to its neighbors, including the distance base-neighbor.
-    links: HashMap<V::VectorRef, FurthestQueue<V>>,
+    links: HashMap<V::VectorRef, FurthestQueueV<V>>,
 }
 
 impl<V: VectorStore> Layer<V> {
@@ -63,11 +70,11 @@ impl<V: VectorStore> Layer<V> {
         }
     }
 
-    fn get_links(&self, from: &V::VectorRef) -> Option<&FurthestQueue<V>> {
+    fn get_links(&self, from: &V::VectorRef) -> Option<&FurthestQueueV<V>> {
         self.links.get(from)
     }
 
-    fn set_links(&mut self, from: V::VectorRef, links: FurthestQueue<V>) {
+    fn set_links(&mut self, from: V::VectorRef, links: FurthestQueueV<V>) {
         self.links.insert(from, links);
     }
 }

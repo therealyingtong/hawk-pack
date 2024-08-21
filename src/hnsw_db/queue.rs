@@ -4,51 +4,59 @@ use serde::{Deserialize, Serialize};
 
 use crate::VectorStore;
 
+pub type FurthestQueueV<V> =
+    FurthestQueue<<V as VectorStore>::VectorRef, <V as VectorStore>::DistanceRef>;
+pub type NearestQueueV<V> =
+    NearestQueue<<V as VectorStore>::VectorRef, <V as VectorStore>::DistanceRef>;
+
 /// FurthestQueue is a list sorted in ascending order, with fast pop of the furthest element.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FurthestQueue<V: VectorStore> {
-    queue: Vec<(V::VectorRef, V::DistanceRef)>,
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FurthestQueue<Vector, Distance> {
+    queue: Vec<(Vector, Distance)>,
 }
 
-impl<V: VectorStore> FurthestQueue<V> {
+impl<Vector: Clone, Distance: Clone> FurthestQueue<Vector, Distance> {
     pub fn new() -> Self {
         FurthestQueue { queue: vec![] }
     }
 
-    pub fn from_ascending_vec(queue: Vec<(V::VectorRef, V::DistanceRef)>) -> Self {
+    pub fn from_ascending_vec(queue: Vec<(Vector, Distance)>) -> Self {
         FurthestQueue { queue }
     }
 
     /// Insert the element `to` with distance `dist` into the queue, maitaining the ascending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub async fn insert(&mut self, store: &mut V, to: V::VectorRef, dist: V::DistanceRef) {
+    pub async fn insert<V>(&mut self, store: &mut V, to: Vector, dist: Distance)
+    where
+        V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
+    {
         let index_asc = store
             .search_sorted(
                 &self
                     .queue
                     .iter()
                     .map(|(_, dist)| dist.clone())
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<Distance>>(),
                 &dist,
             )
             .await;
         self.queue.insert(index_asc, (to, dist));
     }
 
-    pub fn get_nearest(&self) -> Option<&(V::VectorRef, V::DistanceRef)> {
+    pub fn get_nearest(&self) -> Option<&(Vector, Distance)> {
         self.queue.first()
     }
 
-    pub fn get_furthest(&self) -> Option<&(V::VectorRef, V::DistanceRef)> {
+    pub fn get_furthest(&self) -> Option<&(Vector, Distance)> {
         self.queue.last()
     }
 
-    pub fn pop_furthest(&mut self) -> Option<(V::VectorRef, V::DistanceRef)> {
+    pub fn pop_furthest(&mut self) -> Option<(Vector, Distance)> {
         self.queue.pop()
     }
 
-    pub fn get_k_nearest(&self, k: usize) -> &[(V::VectorRef, V::DistanceRef)] {
+    pub fn get_k_nearest(&self, k: usize) -> &[(Vector, Distance)] {
         &self.queue[..k]
     }
 
@@ -59,15 +67,15 @@ impl<V: VectorStore> FurthestQueue<V> {
 
 // Utility implementations.
 
-impl<V: VectorStore> Deref for FurthestQueue<V> {
-    type Target = [(V::VectorRef, V::DistanceRef)];
+impl<Vector, Distance> Deref for FurthestQueue<Vector, Distance> {
+    type Target = [(Vector, Distance)];
 
     fn deref(&self) -> &Self::Target {
         &self.queue
     }
 }
 
-impl<V: VectorStore> Clone for FurthestQueue<V> {
+impl<Vector: Clone, Distance: Clone> Clone for FurthestQueue<Vector, Distance> {
     fn clone(&self) -> Self {
         FurthestQueue {
             queue: self.queue.clone(),
@@ -75,24 +83,24 @@ impl<V: VectorStore> Clone for FurthestQueue<V> {
     }
 }
 
-impl<V: VectorStore> From<FurthestQueue<V>> for Vec<(V::VectorRef, V::DistanceRef)> {
-    fn from(queue: FurthestQueue<V>) -> Self {
+impl<Vector, Distance> From<FurthestQueue<Vector, Distance>> for Vec<(Vector, Distance)> {
+    fn from(queue: FurthestQueue<Vector, Distance>) -> Self {
         queue.queue
     }
 }
 
 /// NearestQueue is a list sorted in descending order, with fast pop of the nearest element.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NearestQueue<V: VectorStore> {
-    queue: Vec<(V::VectorRef, V::DistanceRef)>,
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NearestQueue<Vector, Distance> {
+    queue: Vec<(Vector, Distance)>,
 }
 
-impl<V: VectorStore> NearestQueue<V> {
+impl<Vector: Clone, Distance: Clone> NearestQueue<Vector, Distance> {
     fn new() -> Self {
         NearestQueue { queue: vec![] }
     }
 
-    pub fn from_furthest_queue(furthest_queue: &FurthestQueue<V>) -> Self {
+    pub fn from_furthest_queue(furthest_queue: &FurthestQueue<Vector, Distance>) -> Self {
         NearestQueue {
             queue: furthest_queue.iter().rev().cloned().collect(),
         }
@@ -101,7 +109,10 @@ impl<V: VectorStore> NearestQueue<V> {
     /// Insert the element `to` with distance `dist` into the queue, maitaining the descending order.
     ///
     /// Call the VectorStore to come up with the insertion index.
-    pub async fn insert(&mut self, store: &mut V, to: V::VectorRef, dist: V::DistanceRef) {
+    pub async fn insert<V>(&mut self, store: &mut V, to: Vector, dist: Distance)
+    where
+        V: VectorStore<VectorRef = Vector, DistanceRef = Distance>,
+    {
         let index_asc = store
             .search_sorted(
                 &self
@@ -109,7 +120,7 @@ impl<V: VectorStore> NearestQueue<V> {
                     .iter()
                     .map(|(_, dist)| dist.clone())
                     .rev() // switch to ascending order.
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<Distance>>(),
                 &dist,
             )
             .await;
@@ -117,26 +128,26 @@ impl<V: VectorStore> NearestQueue<V> {
         self.queue.insert(index_des, (to, dist));
     }
 
-    fn get_nearest(&self) -> Option<&(V::VectorRef, V::DistanceRef)> {
+    fn get_nearest(&self) -> Option<&(Vector, Distance)> {
         self.queue.last()
     }
 
-    pub fn pop_nearest(&mut self) -> Option<(V::VectorRef, V::DistanceRef)> {
+    pub fn pop_nearest(&mut self) -> Option<(Vector, Distance)> {
         self.queue.pop()
     }
 }
 
 // Utility implementations.
 
-impl<V: VectorStore> Deref for NearestQueue<V> {
-    type Target = [(V::VectorRef, V::DistanceRef)];
+impl<Vector, Distance> Deref for NearestQueue<Vector, Distance> {
+    type Target = [(Vector, Distance)];
 
     fn deref(&self) -> &Self::Target {
         &self.queue
     }
 }
 
-impl<V: VectorStore> Clone for NearestQueue<V> {
+impl<Vector: Clone, Distance: Clone> Clone for NearestQueue<Vector, Distance> {
     fn clone(&self) -> Self {
         NearestQueue {
             queue: self.queue.clone(),

@@ -1,7 +1,7 @@
 // Converted from Python to Rust.
 use std::collections::HashSet;
 mod queue;
-pub use queue::{FurthestQueue, NearestQueue};
+pub use queue::{FurthestQueue, FurthestQueueV, NearestQueue, NearestQueueV};
 pub mod coroutine;
 
 use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
@@ -42,7 +42,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     async fn connect_bidir(
         &mut self,
         q: &V::VectorRef,
-        mut neighbors: FurthestQueue<V>,
+        mut neighbors: FurthestQueueV<V>,
         lc: usize,
     ) {
         neighbors.trim_to_k_nearest(self.params.M);
@@ -83,12 +83,12 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         self.params.ef
     }
 
-    async fn search_init(&mut self, query: &V::QueryRef) -> (FurthestQueue<V>, usize) {
+    async fn search_init(&mut self, query: &V::QueryRef) -> (FurthestQueueV<V>, usize) {
         if let Some(entry_point) = self.graph_store.get_entry_point().await {
             let entry_vector = entry_point.vector_ref;
             let distance = self.vector_store.eval_distance(query, &entry_vector).await;
 
-            let mut W = FurthestQueue::<V>::new();
+            let mut W = FurthestQueueV::<V>::new();
             W.insert(&mut self.vector_store, entry_vector, distance)
                 .await;
 
@@ -102,7 +102,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     async fn search_layer(
         &mut self,
         q: &V::QueryRef,
-        W: &mut FurthestQueue<V>,
+        W: &mut FurthestQueueV<V>,
         ef: usize,
         lc: usize,
     ) {
@@ -170,7 +170,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         }
     }
 
-    pub async fn search_to_insert(&mut self, query: &V::QueryRef) -> Vec<FurthestQueue<V>> {
+    pub async fn search_to_insert(&mut self, query: &V::QueryRef) -> Vec<FurthestQueueV<V>> {
         let mut links = vec![];
 
         let (mut W, layer_count) = self.search_init(&query).await;
@@ -190,7 +190,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
     pub async fn insert_from_search_results(
         &mut self,
         inserted_vector: V::VectorRef,
-        links: Vec<FurthestQueue<V>>,
+        links: Vec<FurthestQueueV<V>>,
     ) {
         let layer_count = links.len();
 
@@ -213,7 +213,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         }
     }
 
-    pub async fn is_match(&self, neighbors: &[FurthestQueue<V>]) -> bool {
+    pub async fn is_match(&self, neighbors: &[FurthestQueueV<V>]) -> bool {
         match neighbors
             .first()
             .and_then(|bottom_layer| bottom_layer.get_nearest())

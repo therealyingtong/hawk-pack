@@ -3,7 +3,10 @@ use sqlx::postgres::PgRow;
 use sqlx::Row;
 use std::marker::PhantomData;
 
-use crate::{hnsw_db::FurthestQueue, GraphStore, VectorStore};
+use crate::{
+    hnsw_db::{FurthestQueue, FurthestQueueV},
+    GraphStore, VectorStore,
+};
 
 use super::EntryPoint;
 
@@ -79,7 +82,11 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .expect("Failed to set entry point");
     }
 
-    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize) -> FurthestQueue<V> {
+    async fn get_links(
+        &self,
+        base: &<V as VectorStore>::VectorRef,
+        lc: usize,
+    ) -> FurthestQueueV<V> {
         let base_str = serde_json::to_string(base).unwrap();
 
         sqlx::query(
@@ -93,13 +100,13 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
         .await
         .expect("Failed to fetch links")
         .map(|row: PgRow| {
-            let x: sqlx::types::Json<FurthestQueue<V>> = row.get("links");
+            let x: sqlx::types::Json<FurthestQueueV<V>> = row.get("links");
             x.as_ref().clone()
         })
         .unwrap_or_else(FurthestQueue::new)
     }
 
-    async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueue<V>, lc: usize) {
+    async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize) {
         let base_str = serde_json::to_string(&base).unwrap();
 
         sqlx::query(
@@ -123,7 +130,7 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
 mod tests {
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
-    use crate::hnsw_db::HawkSearcher;
+    use crate::hnsw_db::{FurthestQueue, HawkSearcher};
     use tokio;
 
     #[tokio::test]
