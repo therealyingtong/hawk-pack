@@ -6,6 +6,8 @@ use std::fmt::Debug;
 
 pub mod graph_mem;
 mod graph_pg;
+pub use graph_mem::GraphMem;
+pub use graph_pg::GraphPg;
 
 #[allow(async_fn_in_trait)]
 pub trait GraphStore<V: VectorStore> {
