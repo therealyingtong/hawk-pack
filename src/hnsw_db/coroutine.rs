@@ -32,7 +32,6 @@ where
             OpsCollector { ops: tx.clone() },
         );
         let result = hawk.search_to_insert(&query).await;
-        let result = result.into_iter().map(|queue| queue.into()).collect();
         tx.send(Op::SearchResult { query, result }).await.unwrap();
     });
     ReceiverStream::new(rx)
@@ -64,18 +63,18 @@ pub enum Op<Query, Vector, Distance> {
     GetLinks {
         base: Vector,
         lc: usize,
-        reply: oneshot::Sender<Vec<(Vector, Distance)>>, // FurthestQueue
+        reply: oneshot::Sender<FurthestQueue<Vector, Distance>>,
     },
     SetLinks {
         base: Vector,
-        links: Vec<(Vector, Distance)>, // FurthestQueue
+        links: FurthestQueue<Vector, Distance>,
         lc: usize,
     },
 
     // Result.
     SearchResult {
         query: Query,
-        result: Vec<Vec<(Vector, Distance)>>, // FurthestQueue
+        result: Vec<FurthestQueue<Vector, Distance>>,
     },
 }
 
@@ -169,7 +168,7 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
         self.ops.send(op).await.unwrap();
     }
 
-    async fn get_links(&self, base: &V, lc: usize) -> FurthestQueue<Self> {
+    async fn get_links(&self, base: &V, lc: usize) -> FurthestQueue<V, D> {
         let (reply, get_reply) = oneshot::channel();
 
         let op = Op::GetLinks {
@@ -179,22 +178,19 @@ impl<Q: Ref, V: Ref, D: Ref> GraphStore<OpsCollector<Q, V, D>> for OpsCollector<
         };
 
         self.ops.send(op).await.unwrap();
-        let links = get_reply.await.unwrap();
-        FurthestQueue::from_ascending_vec(links)
+        get_reply.await.unwrap()
     }
 
-    async fn set_links(&mut self, base: V, links: FurthestQueue<Self>, lc: usize) {
-        let op = Op::SetLinks {
-            base,
-            links: links.into(),
-            lc,
-        };
+    async fn set_links(&mut self, base: V, links: FurthestQueue<V, D>, lc: usize) {
+        let op = Op::SetLinks { base, links, lc };
         self.ops.send(op).await.unwrap();
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::Op::*;
     use super::*;
     use futures::stream::StreamExt;
@@ -219,7 +215,7 @@ mod tests {
         match op {
             Op::SearchResult { query, result } => {
                 assert_eq!(query, 0);
-                assert_eq!(result, Vec::<Vec<(V, D)>>::new());
+                assert!(result.is_empty());
             }
             _ => panic!("Expected SearchResult, got {:?}", op),
         }
@@ -277,7 +273,13 @@ mod tests {
         match op {
             Op::SearchResult { query, result } => {
                 assert_eq!(query, some_query);
-                assert_eq!(result, vec![vec![(some_vec, some_distance)]]);
+                assert_eq!(
+                    result,
+                    vec![FurthestQueue::from_ascending_vec(vec![(
+                        some_vec,
+                        some_distance
+                    )])]
+                );
             }
             _ => panic!("Expected SearchResult, got {:?}", op),
         }
