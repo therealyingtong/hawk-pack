@@ -10,7 +10,7 @@ pub type NearestQueueV<V> =
     NearestQueue<<V as VectorStore>::VectorRef, <V as VectorStore>::DistanceRef>;
 
 /// FurthestQueue is a list sorted in ascending order, with fast pop of the furthest element.
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FurthestQueue<Vector, Distance> {
     queue: Vec<(Vector, Distance)>,
 }
@@ -96,10 +96,6 @@ pub struct NearestQueue<Vector, Distance> {
 }
 
 impl<Vector: Clone, Distance: Clone> NearestQueue<Vector, Distance> {
-    fn new() -> Self {
-        NearestQueue { queue: vec![] }
-    }
-
     pub fn from_furthest_queue(furthest_queue: &FurthestQueue<Vector, Distance>) -> Self {
         NearestQueue {
             queue: furthest_queue.iter().rev().cloned().collect(),
@@ -128,6 +124,7 @@ impl<Vector: Clone, Distance: Clone> NearestQueue<Vector, Distance> {
         self.queue.insert(index_des, (to, dist));
     }
 
+    #[allow(dead_code)]
     fn get_nearest(&self) -> Option<&(Vector, Distance)> {
         self.queue.last()
     }

@@ -88,7 +88,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     type VectorRef = V;
     type DistanceRef = D;
 
-    async fn insert(&mut self, query: &Self::QueryRef) -> Self::VectorRef {
+    async fn insert(&mut self, _query: &Self::QueryRef) -> Self::VectorRef {
         todo!()
     }
 
@@ -148,7 +148,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
         get_reply.await.unwrap()
     }
 
-    async fn is_match(&self, distance: &Self::DistanceRef) -> bool {
+    async fn is_match(&self, _distance: &Self::DistanceRef) -> bool {
         todo!()
     }
 }
