@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::VectorStore;
 
 /// FurthestQueue is a list sorted in ascending order, with fast pop of the furthest element.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct FurthestQueue<V: VectorStore> {
     queue: Vec<(V::VectorRef, V::DistanceRef)>,
 }
@@ -88,10 +88,6 @@ pub struct NearestQueue<V: VectorStore> {
 }
 
 impl<V: VectorStore> NearestQueue<V> {
-    fn new() -> Self {
-        NearestQueue { queue: vec![] }
-    }
-
     pub fn from_furthest_queue(furthest_queue: &FurthestQueue<V>) -> Self {
         NearestQueue {
             queue: furthest_queue.iter().rev().cloned().collect(),
@@ -117,6 +113,7 @@ impl<V: VectorStore> NearestQueue<V> {
         self.queue.insert(index_des, (to, dist));
     }
 
+    #[allow(dead_code)]
     fn get_nearest(&self) -> Option<&(V::VectorRef, V::DistanceRef)> {
         self.queue.last()
     }
