@@ -51,6 +51,22 @@ impl<V: VectorStore> GraphPg<V> {
             phantom: PhantomData,
         })
     }
+
+    // TODO: safer approach to testing with unique schemas.
+    pub async fn new_test() -> Result<Self, sqlx::Error> {
+        let graph = GraphPg::new().await?;
+
+        sqlx::query("DELETE FROM hawk_graph_entry")
+            .execute(&graph.pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM hawk_graph_links")
+            .execute(&graph.pool)
+            .await
+            .unwrap();
+
+        Ok(graph)
+    }
 }
 
 impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
