@@ -6,13 +6,19 @@ edition = "2021"
 [dependencies]
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 rand = "0.8"
-sqlx = { version = "=0.7.0", features = ["runtime-tokio", "postgres", "json", "sqlite"] }
+sqlx = { version = "=0.7.0", features = [
+    "runtime-tokio",
+    "postgres",
+    "json",
+    "sqlite",
+] }
 tokio = { version = "1.38", features = ["full"] }
 tokio-stream = "0.1"
 futures = "0.3.30"
 serde = "1.0"
 serde_json = { version = "1.0", features = ["raw_value"] }
-
+dotenvy = "0.15"
+eyre = "0.6"
 
 [[bench]]
 name = "hnsw"

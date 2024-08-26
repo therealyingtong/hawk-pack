@@ -7,7 +7,7 @@ use std::fmt::Debug;
 pub mod graph_mem;
 mod graph_pg;
 pub use graph_mem::GraphMem;
-pub use graph_pg::GraphPg;
+pub use graph_pg::{test_utils::TestGraphPg, GraphPg};
 
 #[allow(async_fn_in_trait)]
 pub trait GraphStore<V: VectorStore> {
@@ -15,7 +15,8 @@ pub trait GraphStore<V: VectorStore> {
 
     async fn set_entry_point(&mut self, entry_point: EntryPoint<V::VectorRef>);
 
-    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize) -> FurthestQueueV<V>;
+    async fn get_links(&self, base: &<V as VectorStore>::VectorRef, lc: usize)
+        -> FurthestQueueV<V>;
 
     async fn set_links(&mut self, base: V::VectorRef, links: FurthestQueueV<V>, lc: usize);
 }

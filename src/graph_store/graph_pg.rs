@@ -1,18 +1,17 @@
-use sqlx::postgres::PgPoolOptions;
-use sqlx::postgres::PgRow;
-use sqlx::Row;
-use std::marker::PhantomData;
-
 use crate::{
     hnsw_db::{FurthestQueue, FurthestQueueV},
     GraphStore, VectorStore,
 };
+use eyre::{eyre, Result};
+use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::PgRow;
+use sqlx::Executor;
+use sqlx::Row;
+use std::marker::PhantomData;
 
 use super::EntryPoint;
 
-const DB_URL: &str = "postgres://postgres:postgres@localhost/postgres";
-
-const POOL_SIZE: u32 = 5;
+const MAX_CONNECTIONS: u32 = 5;
 
 const CREATE_TABLE_LINKS: &str = "
 CREATE TABLE IF NOT EXISTS hawk_graph_links (
@@ -36,13 +35,25 @@ pub struct GraphPg<V: VectorStore> {
 }
 
 impl<V: VectorStore> GraphPg<V> {
-    #[allow(dead_code)]
-    pub async fn new() -> Result<Self, sqlx::Error> {
+    pub async fn new(url: &str, schema_name: &str) -> Result<Self> {
+        let connect_sql = sql_switch_schema(schema_name)?;
+
         let pool = PgPoolOptions::new()
-            .max_connections(POOL_SIZE)
-            .connect(DB_URL)
+            .max_connections(MAX_CONNECTIONS)
+            .after_connect(move |conn, _meta| {
+                // Switch to the given schema in every connection.
+                let connect_sql = connect_sql.clone();
+                Box::pin(async move {
+                    conn.execute(connect_sql.as_ref()).await.inspect_err(|e| {
+                        eprintln!("error in after_connect: {:?}", e);
+                    })?;
+                    Ok(())
+                })
+            })
+            .connect(url)
             .await?;
 
+        // Create the schema on the first startup.
         sqlx::query(CREATE_TABLE_LINKS).execute(&pool).await?;
         sqlx::query(CREATE_TABLE_ENTRY).execute(&pool).await?;
 
@@ -50,22 +61,6 @@ impl<V: VectorStore> GraphPg<V> {
             pool,
             phantom: PhantomData,
         })
-    }
-
-    // TODO: safer approach to testing with unique schemas.
-    pub async fn new_test() -> Result<Self, sqlx::Error> {
-        let graph = GraphPg::new().await?;
-
-        sqlx::query("DELETE FROM hawk_graph_entry")
-            .execute(&graph.pool)
-            .await
-            .unwrap();
-        sqlx::query("DELETE FROM hawk_graph_links")
-            .execute(&graph.pool)
-            .await
-            .unwrap();
-
-        Ok(graph)
     }
 }
 
@@ -144,8 +139,96 @@ impl<V: VectorStore> GraphStore<V> for GraphPg<V> {
     }
 }
 
+fn sql_switch_schema(schema_name: &str) -> Result<String> {
+    sanitize_identifier(schema_name)?;
+    Ok(format!(
+        "
+        CREATE SCHEMA IF NOT EXISTS \"{}\";
+        SET search_path TO \"{}\";
+        ",
+        schema_name, schema_name
+    ))
+}
+
+fn sanitize_identifier(input: &str) -> Result<()> {
+    if input.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        Ok(())
+    } else {
+        Err(eyre!("Invalid SQL identifier"))
+    }
+}
+
+pub mod test_utils {
+    use super::*;
+    use std::{
+        env,
+        ops::{Deref, DerefMut},
+    };
+    const DOTENV_TEST: &str = ".env.test";
+    const ENV_DB_URL: &str = "HAWK__DATABASE__URL";
+    const SCHEMA_PREFIX: &str = "hawk_test";
+
+    /// A test database. It creates a unique schema for each test. Call `cleanup` at the end of the test.
+    ///
+    /// Access the database with `&graph` or `graph.owned()`.
+    pub struct TestGraphPg<V: VectorStore> {
+        graph: GraphPg<V>,
+        schema_name: String,
+    }
+
+    impl<V: VectorStore> TestGraphPg<V> {
+        pub async fn new() -> Result<Self> {
+            let schema_name = temporary_name();
+            let graph = GraphPg::new(&test_db_url()?, &schema_name).await?;
+            Ok(TestGraphPg { graph, schema_name })
+        }
+
+        pub async fn cleanup(&self) -> Result<()> {
+            cleanup(&self.graph.pool, &self.schema_name).await
+        }
+
+        pub fn owned(&self) -> GraphPg<V> {
+            GraphPg {
+                pool: self.graph.pool.clone(),
+                phantom: PhantomData,
+            }
+        }
+    }
+
+    impl<V: VectorStore> Deref for TestGraphPg<V> {
+        type Target = GraphPg<V>;
+        fn deref(&self) -> &Self::Target {
+            &self.graph
+        }
+    }
+
+    impl<V: VectorStore> DerefMut for TestGraphPg<V> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.graph
+        }
+    }
+
+    fn test_db_url() -> Result<String> {
+        dotenvy::from_filename(DOTENV_TEST)?;
+        Ok(env::var(ENV_DB_URL)?)
+    }
+
+    fn temporary_name() -> String {
+        format!("{}_{}", SCHEMA_PREFIX, rand::random::<u32>())
+    }
+
+    async fn cleanup(pool: &sqlx::PgPool, schema_name: &str) -> Result<()> {
+        assert!(schema_name.starts_with(SCHEMA_PREFIX));
+        sqlx::query(&format!("DROP SCHEMA \"{}\" CASCADE", schema_name))
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::test_utils::TestGraphPg;
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
@@ -153,17 +236,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_db() {
-        let mut graph = GraphPg::<LazyMemoryStore>::new().await.unwrap();
+        let mut graph = TestGraphPg::<LazyMemoryStore>::new().await.unwrap();
         let mut vector_store = LazyMemoryStore::new();
-
-        sqlx::query("DELETE FROM hawk_graph_entry")
-            .execute(&graph.pool)
-            .await
-            .unwrap();
-        sqlx::query("DELETE FROM hawk_graph_links")
-            .execute(&graph.pool)
-            .await
-            .unwrap();
 
         let vectors = {
             let mut v = vec![];
@@ -208,22 +282,15 @@ mod tests {
             let links2 = graph.get_links(&vectors[i], 0).await;
             assert_eq!(*links, *links2);
         }
+
+        graph.cleanup().await.unwrap();
     }
 
     #[tokio::test]
     async fn test_hnsw_db() {
-        let graph_store = GraphPg::new().await.unwrap();
-        sqlx::query("DELETE FROM hawk_graph_entry")
-            .execute(&graph_store.pool)
-            .await
-            .unwrap();
-        sqlx::query("DELETE FROM hawk_graph_links")
-            .execute(&graph_store.pool)
-            .await
-            .unwrap();
-
+        let graph = TestGraphPg::new().await.unwrap();
         let vector_store = LazyMemoryStore::new();
-        let mut db = HawkSearcher::new(vector_store, graph_store);
+        let mut db = HawkSearcher::new(vector_store, graph.owned());
 
         let queries = (0..10)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))
@@ -243,5 +310,7 @@ mod tests {
             let neighbors = db.search_to_insert(query).await;
             assert!(db.is_match(&neighbors).await);
         }
+
+        graph.cleanup().await.unwrap();
     }
 }
