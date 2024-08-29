@@ -3,6 +3,7 @@ use crate::{
     hnsw_db::{FurthestQueue, HawkSearcher},
     GraphStore, Ref, VectorStore,
 };
+use aes_prng::AesRng;
 use std::fmt::Debug;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -27,9 +28,11 @@ where
 {
     let (tx, rx) = mpsc::channel(1);
     tokio::spawn(async move {
-        let mut hawk = HawkSearcher::new(
+        let mut rng = AesRng::from_random_seed();
+        let hawk = HawkSearcher::new(
             OpsCollector { ops: tx.clone() },
             OpsCollector { ops: tx.clone() },
+            &mut rng,
         );
         let result = hawk.search_to_insert(&query).await;
         tx.send(Op::SearchResult { query, result }).await.unwrap();
@@ -93,7 +96,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     }
 
     async fn eval_distance(
-        &mut self,
+        &self,
         query: &Self::QueryRef,
         vector: &Self::VectorRef,
     ) -> Self::DistanceRef {
@@ -104,7 +107,7 @@ impl<Q: Ref, V: Ref, D: Ref> VectorStore for OpsCollector<Q, V, D> {
     }
 
     async fn eval_distance_batch(
-        &mut self,
+        &self,
         query: &Self::QueryRef,
         vectors: &[Self::VectorRef],
     ) -> Vec<Self::DistanceRef> {
