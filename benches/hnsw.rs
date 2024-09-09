@@ -1,20 +1,22 @@
+use aes_prng::AesRng;
 use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
-use hawk_pack::examples::eager_memory_store::EagerMemoryStore;
 use hawk_pack::examples::lazy_memory_store::LazyMemoryStore;
 use hawk_pack::graph_store::graph_mem::GraphMem;
 use hawk_pack::hnsw_db::HawkSearcher;
 use hawk_pack::linear_db::LinearDb;
 use hawk_pack::VectorStore;
+use rand::SeedableRng;
 
 fn hnsw_db(c: &mut Criterion) {
     let mut group = c.benchmark_group("hnsw");
     for database_size in [1000, 10000, 100000] {
         let vector_store = LazyMemoryStore::new();
         let graph_store = GraphMem::new();
-        let mut initial_db = HawkSearcher::new(vector_store, graph_store);
+        let mut rng = AesRng::seed_from_u64(0_u64);
+        let mut initial_db = HawkSearcher::new(vector_store, graph_store, &mut rng);
 
         let queries = (0..database_size)
             .map(|raw_query| initial_db.vector_store.prepare_query(raw_query))
@@ -56,7 +58,7 @@ fn hnsw_db(c: &mut Criterion) {
 fn linear(c: &mut Criterion) {
     let mut group = c.benchmark_group("linear");
     for database_size in [1000, 10000, 100000] {
-        let vector_store = EagerMemoryStore::new();
+        let vector_store = LazyMemoryStore::new();
         let mut initial_db = LinearDb::new(vector_store);
 
         let queries = (0..database_size)

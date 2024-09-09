@@ -232,8 +232,11 @@ mod tests {
     use super::*;
     use crate::examples::lazy_memory_store::LazyMemoryStore;
     use crate::hnsw_db::{FurthestQueue, HawkSearcher};
+    use aes_prng::AesRng;
+    use rand::SeedableRng;
     use tokio;
 
+    #[ignore]
     #[tokio::test]
     async fn test_db() {
         let mut graph = TestGraphPg::<LazyMemoryStore>::new().await.unwrap();
@@ -272,9 +275,7 @@ mod tests {
             let mut links = FurthestQueue::new();
 
             for j in 4..7 {
-                links
-                    .insert(&mut vector_store, vectors[j], distances[j])
-                    .await;
+                links.insert(&vector_store, vectors[j], distances[j]).await;
             }
 
             graph.set_links(vectors[i], links.clone(), 0).await;
@@ -286,11 +287,13 @@ mod tests {
         graph.cleanup().await.unwrap();
     }
 
+    #[ignore]
     #[tokio::test]
     async fn test_hnsw_db() {
         let graph = TestGraphPg::new().await.unwrap();
         let vector_store = LazyMemoryStore::new();
-        let mut db = HawkSearcher::new(vector_store, graph.owned());
+        let mut rng = AesRng::seed_from_u64(0_u64);
+        let mut db = HawkSearcher::new(vector_store, graph.owned(), &mut rng);
 
         let queries = (0..10)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))
