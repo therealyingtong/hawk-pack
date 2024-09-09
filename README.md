@@ -20,7 +20,7 @@ From there, the algorithm [HNSW](https://arxiv.org/abs/1603.09320) is implemente
 ```bash
 docker-compose up -d
 
-cargo test
+cargo test --features db_dependent
 ```
 
 See the `trait VectorStore` for the interface that the external store must provide. Check out the `examples` module.
