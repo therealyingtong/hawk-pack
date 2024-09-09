@@ -212,6 +212,7 @@ pub mod test_utils {
 }
 
 #[cfg(test)]
+#[cfg(feature = "db_dependent")]
 mod tests {
     use super::test_utils::TestGraphPg;
     use super::*;
@@ -221,7 +222,6 @@ mod tests {
     use rand::SeedableRng;
     use tokio;
 
-    #[ignore]
     #[tokio::test]
     async fn test_db() {
         let mut graph = TestGraphPg::<LazyMemoryStore>::new().await.unwrap();
@@ -272,7 +272,6 @@ mod tests {
         graph.cleanup().await.unwrap();
     }
 
-    #[ignore]
     #[tokio::test]
     async fn test_hnsw_db() {
         let graph = TestGraphPg::new().await.unwrap();
