@@ -3,31 +3,17 @@ use crate::{
     GraphStore, VectorStore,
 };
 use eyre::{eyre, Result};
-use sqlx::postgres::PgPoolOptions;
 use sqlx::postgres::PgRow;
 use sqlx::Executor;
 use sqlx::Row;
+use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
 use std::marker::PhantomData;
 
 use super::EntryPoint;
 
 const MAX_CONNECTIONS: u32 = 5;
 
-const CREATE_TABLE_LINKS: &str = "
-CREATE TABLE IF NOT EXISTS hawk_graph_links (
-    source_ref text NOT NULL,
-    layer integer NOT NULL,
-    links jsonb NOT NULL,
-    CONSTRAINT hawk_graph_pkey PRIMARY KEY (source_ref, layer)
-)";
-
-const CREATE_TABLE_ENTRY: &str = "
-CREATE TABLE IF NOT EXISTS hawk_graph_entry (
-    entry_point jsonb,
-    id integer NOT NULL,
-    CONSTRAINT hawk_graph_entry_pkey PRIMARY KEY (id)
-)
-";
+static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 pub struct GraphPg<V: VectorStore> {
     pool: sqlx::PgPool,
@@ -54,8 +40,7 @@ impl<V: VectorStore> GraphPg<V> {
             .await?;
 
         // Create the schema on the first startup.
-        sqlx::query(CREATE_TABLE_LINKS).execute(&pool).await?;
-        sqlx::query(CREATE_TABLE_ENTRY).execute(&pool).await?;
+        MIGRATOR.run(&pool).await?;
 
         Ok(GraphPg {
             pool,
