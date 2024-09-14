@@ -24,6 +24,11 @@ impl<V: VectorStore> GraphMem<V> {
 // Needed when switching from a PlaintextStore to a secret shared VectorStore.
 impl<V: VectorStore> GraphMem<V> {
     #[cfg(test)]
+    pub fn num_layers(&self) -> usize {
+        self.layers.len()
+    }
+
+    #[cfg(test)]
     pub fn layer(&self, layer: usize) -> &Layer<V> {
         &self.layers[layer]
     }
