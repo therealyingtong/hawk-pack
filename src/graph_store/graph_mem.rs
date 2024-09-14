@@ -23,12 +23,12 @@ impl<V: VectorStore> GraphMem<V> {
 // Plain converter for a Graph structure that has the same distance ref and vector ref
 // Needed when switching from a PlaintextStore to a secret shared VectorStore.
 impl<V: VectorStore> GraphMem<V> {
-    #[cfg(test)]
+    #[cfg(feature = "bench")]
     pub fn num_layers(&self) -> usize {
         self.layers.len()
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "bench")]
     pub fn layer(&self, layer: usize) -> &Layer<V> {
         &self.layers[layer]
     }
@@ -101,7 +101,7 @@ pub struct Layer<V: VectorStore> {
 }
 
 impl<V: VectorStore> Layer<V> {
-    #[cfg(test)]
+    #[cfg(feature = "bench")]
     pub fn nodes(&self) -> Vec<&V::VectorRef> {
         self.links.keys().collect()
     }
