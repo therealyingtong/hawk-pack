@@ -23,6 +23,11 @@ impl<V: VectorStore> GraphMem<V> {
 // Plain converter for a Graph structure that has the same distance ref and vector ref
 // Needed when switching from a PlaintextStore to a secret shared VectorStore.
 impl<V: VectorStore> GraphMem<V> {
+    #[cfg(test)]
+    pub fn layer(&self, layer: usize) -> &Layer<V> {
+        &self.layers[layer]
+    }
+
     pub fn from_another<U>(graph: GraphMem<U>) -> Self
     where
         U: VectorStore,
