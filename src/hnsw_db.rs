@@ -76,7 +76,7 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
         self.graph_store.set_links(q.clone(), neighbors, lc).await;
     }
 
-    fn select_layer(&mut self) -> usize {
+    pub fn select_layer(&mut self) -> usize {
         let random = self.rng.gen::<f64>();
         (-random.ln() * self.params.m_L) as usize
     }
