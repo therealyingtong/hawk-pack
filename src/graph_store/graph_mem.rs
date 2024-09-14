@@ -101,6 +101,11 @@ pub struct Layer<V: VectorStore> {
 }
 
 impl<V: VectorStore> Layer<V> {
+    #[cfg(test)]
+    pub fn nodes(&self) -> Vec<&V::VectorRef> {
+        self.links.keys().collect()
+    }
+
     fn new() -> Self {
         Layer {
             links: HashMap::new(),
