@@ -31,6 +31,14 @@ pub struct HawkSearcher<V: VectorStore, G: GraphStore<V>> {
 }
 
 impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
+    pub fn m_max(&self) -> usize {
+        self.params.Mmax
+    }
+
+    pub fn m_max_0(&self) -> usize {
+        self.params.Mmax0
+    }
+
     pub fn new<R: RngCore>(vector_store: V, graph_store: G, rng: &mut R) -> Self {
         let rng = AesRng::from_rng(rng).unwrap();
         HawkSearcher {
