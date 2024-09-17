@@ -33,6 +33,11 @@ impl<V: VectorStore> GraphMem<V> {
         &self.layers[layer]
     }
 
+    #[cfg(feature = "bench")]
+    pub fn layer_mut(&mut self, layer: usize) -> &mut Layer<V> {
+        &mut self.layers[layer]
+    }
+
     pub fn from_another<U>(graph: GraphMem<U>) -> Self
     where
         U: VectorStore,
