@@ -107,8 +107,8 @@ pub struct Layer<V: VectorStore> {
 
 impl<V: VectorStore> Layer<V> {
     #[cfg(feature = "bench")]
-    pub fn nodes(&self) -> Vec<&V::VectorRef> {
-        self.links.keys().collect()
+    pub fn nodes(&self) -> Vec<V::VectorRef> {
+        self.links.keys().map(|k| k.clone()).collect()
     }
 
     fn new() -> Self {
