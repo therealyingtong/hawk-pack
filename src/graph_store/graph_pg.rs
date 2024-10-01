@@ -7,7 +7,7 @@ use sqlx::postgres::PgRow;
 use sqlx::Executor;
 use sqlx::Row;
 use sqlx::{migrate::Migrator, postgres::PgPoolOptions};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, path};
 
 use super::EntryPoint;
 
@@ -15,7 +15,9 @@ const MAX_CONNECTIONS: u32 = 5;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
+#[derive(Clone)]
 pub struct GraphPg<V: VectorStore> {
+    schema_name: String,
     pool: sqlx::PgPool,
     phantom: PhantomData<V>,
 }
@@ -43,9 +45,80 @@ impl<V: VectorStore> GraphPg<V> {
         MIGRATOR.run(&pool).await?;
 
         Ok(GraphPg {
+            schema_name: schema_name.to_owned(),
             pool,
             phantom: PhantomData,
         })
+    }
+
+    pub async fn copy_in(&self, graph_entry: String, graph_links: String) -> Result<()> {
+        {
+            let table_name = "hawk_graph_entry";
+            let file = tokio::fs::File::open(graph_entry).await?;
+            let mut conn = self.pool.acquire().await?;
+
+            let mut copy_stream = conn
+                .copy_in_raw(&format!(
+                    "COPY {} FROM STDIN (FORMAT CSV, HEADER)",
+                    table_name
+                ))
+                .await?;
+
+            copy_stream.read_from(file).await?;
+            copy_stream.finish().await?;
+        }
+
+        {
+            let table_name = "hawk_graph_links";
+            let file = tokio::fs::File::open(graph_links).await?;
+            let mut conn = self.pool.acquire().await?;
+
+            let mut copy_stream = conn
+                .copy_in_raw(&format!(
+                    "COPY {} FROM STDIN (FORMAT CSV, HEADER)",
+                    table_name
+                ))
+                .await?;
+
+            copy_stream.read_from(file).await?;
+            copy_stream.finish().await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn copy_out(&self) -> Result<(String, String)> {
+        use futures::stream::TryStreamExt;
+        use tokio::io::AsyncWriteExt;
+
+        let tables = ["hawk_graph_entry", "hawk_graph_links"];
+        let mut paths = vec![];
+
+        for table_name in tables.iter() {
+            let file_name = format!("{}_{}.csv", self.schema_name.clone(), table_name);
+            let path = path::absolute(file_name.clone())?
+                .as_os_str()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            paths.push(path.clone());
+
+            let mut file = tokio::fs::File::create(path).await?;
+            let mut conn = self.pool.acquire().await?;
+
+            let mut copy_stream = conn
+                .copy_out_raw(&format!(
+                    "COPY {} TO STDOUT (FORMAT CSV, HEADER)",
+                    table_name
+                ))
+                .await?;
+
+            while let Some(chunk) = copy_stream.try_next().await? {
+                file.write_all(&chunk).await?;
+            }
+        }
+
+        Ok((paths[0].clone(), paths[1].clone()))
     }
 }
 
@@ -174,6 +247,7 @@ pub mod test_utils {
 
         pub fn owned(&self) -> GraphPg<V> {
             GraphPg {
+                schema_name: self.schema_name.clone(),
                 pool: self.graph.pool.clone(),
                 phantom: PhantomData,
             }
@@ -277,7 +351,7 @@ mod tests {
         let graph = TestGraphPg::new().await.unwrap();
         let vector_store = LazyMemoryStore::new();
         let mut rng = AesRng::seed_from_u64(0_u64);
-        let mut db = HawkSearcher::new(vector_store, graph.owned(), &mut rng);
+        let mut db = HawkSearcher::new(vector_store.clone(), graph.owned(), &mut rng);
 
         let queries = (0..10)
             .map(|raw_query| db.vector_store.prepare_query(raw_query))
@@ -298,6 +372,24 @@ mod tests {
             assert!(db.is_match(&neighbors).await);
         }
 
+        let (graph_entry, graph_links) = graph.copy_out().await.unwrap();
+        let vector_store = db.vector_store.clone();
         graph.cleanup().await.unwrap();
+
+        // Test copy_in
+        {
+            let graph = TestGraphPg::new().await.unwrap();
+            graph.copy_in(graph_entry, graph_links).await.unwrap();
+
+            let mut rng = AesRng::seed_from_u64(0_u64);
+            let db = HawkSearcher::new(vector_store.clone(), graph.owned(), &mut rng);
+
+            // Search for the same codes and find matches.
+            for query in queries.iter() {
+                let neighbors = db.search_to_insert(query).await;
+                assert!(db.is_match(&neighbors).await);
+            }
+            graph.cleanup().await.unwrap();
+        }
     }
 }
