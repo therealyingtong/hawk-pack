@@ -18,6 +18,23 @@ pub struct Params {
     m_L: f64,
 }
 
+impl Params {
+    pub fn new_with_m(m: usize) -> Self {
+        Self {
+            ef: m * 2,
+            M: m,
+            Mmax: m,
+            Mmax0: m,
+            m_L: 0.3,
+        }
+    }
+
+    #[allow(non_snake_case)]
+    pub fn M(&self) -> usize {
+        self.M
+    }
+}
+
 /// An implementation of the HNSW algorithm.
 ///
 /// Operations on vectors are delegated to a VectorStore.
