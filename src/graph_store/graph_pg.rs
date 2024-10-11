@@ -60,40 +60,7 @@ impl<V: VectorStore> DbStore for GraphPg<V> {
     }
 
     async fn copy_out(&self) -> Result<Vec<(String, String)>> {
-        use futures::stream::TryStreamExt;
-        use tokio::io::AsyncWriteExt;
-
-        let tables = ["hawk_graph_entry", "hawk_graph_links"];
-        let mut paths = vec![];
-
-        for table_name in tables.iter() {
-            let file_name = format!("{}_{}.csv", self.schema_name.clone(), table_name);
-            let path = path::absolute(file_name.clone())?
-                .as_os_str()
-                .to_str()
-                .unwrap()
-                .to_owned();
-            paths.push(path.clone());
-
-            let mut file = tokio::fs::File::create(path).await?;
-            let mut conn = self.pool.acquire().await?;
-
-            let mut copy_stream = conn
-                .copy_out_raw(&format!(
-                    "COPY {} TO STDOUT (FORMAT CSV, HEADER)",
-                    table_name
-                ))
-                .await?;
-
-            while let Some(chunk) = copy_stream.try_next().await? {
-                file.write_all(&chunk).await?;
-            }
-        }
-
-        Ok(vec![
-            (tables[0].to_owned(), paths[0].clone()),
-            (tables[1].to_owned(), paths[1].clone()),
-        ])
+        self.copy_out_with_filename(self.schema_name.clone()).await
     }
 
     async fn cleanup(&self) -> Result<()> {
@@ -220,6 +187,43 @@ impl<V: VectorStore> GraphPg<V> {
         }
 
         graph_mem
+    }
+
+    pub async fn copy_out_with_filename(&self, filename: String) -> Result<Vec<(String, String)>> {
+        use futures::stream::TryStreamExt;
+        use tokio::io::AsyncWriteExt;
+
+        let tables = ["hawk_graph_entry", "hawk_graph_links"];
+        let mut paths = vec![];
+
+        for table_name in tables.iter() {
+            let file_name = format!("{}_{}.csv", filename, table_name);
+            let path = path::absolute(file_name.clone())?
+                .as_os_str()
+                .to_str()
+                .unwrap()
+                .to_owned();
+            paths.push(path.clone());
+
+            let mut file = tokio::fs::File::create(path).await?;
+            let mut conn = self.pool.acquire().await?;
+
+            let mut copy_stream = conn
+                .copy_out_raw(&format!(
+                    "COPY {} TO STDOUT (FORMAT CSV, HEADER)",
+                    table_name
+                ))
+                .await?;
+
+            while let Some(chunk) = copy_stream.try_next().await? {
+                file.write_all(&chunk).await?;
+            }
+        }
+
+        Ok(vec![
+            (tables[0].to_owned(), paths[0].clone()),
+            (tables[1].to_owned(), paths[1].clone()),
+        ])
     }
 }
 
