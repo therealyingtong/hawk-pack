@@ -10,7 +10,7 @@ use crate::{graph_store::EntryPoint, GraphStore, VectorStore};
 
 #[allow(non_snake_case)]
 #[derive(PartialEq, Clone)]
-struct Params {
+pub struct Params {
     ef: usize,
     M: usize,
     Mmax: usize,
@@ -41,6 +41,21 @@ impl<V: VectorStore, G: GraphStore<V>> HawkSearcher<V, G> {
                 Mmax0: 32,
                 m_L: 0.3,
             },
+            vector_store,
+            graph_store,
+            rng,
+        }
+    }
+
+    pub fn new_with_params<R: RngCore>(
+        params: Params,
+        vector_store: V,
+        graph_store: G,
+        rng: &mut R,
+    ) -> Self {
+        let rng = AesRng::from_rng(rng).unwrap();
+        HawkSearcher {
+            params,
             vector_store,
             graph_store,
             rng,
