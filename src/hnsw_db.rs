@@ -34,6 +34,21 @@ impl Default for HawkSearcher {
 }
 
 impl HawkSearcher {
+    pub fn new_with_m(m: usize) -> Self {
+        Self {
+            ef: m * 2,
+            M: m,
+            Mmax: m,
+            Mmax0: m,
+            m_L: 0.3,
+        }
+    }
+
+    #[allow(non_snake_case)]
+    pub fn M(&self) -> usize {
+        self.M
+    }
+
     async fn connect_bidir<V: VectorStore, G: GraphStore<V>>(
         &self,
         vector_store: &mut V,
